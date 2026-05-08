@@ -7,12 +7,6 @@ import { isIosInstallable, promptInstall, subscribeToInstallPrompt } from './pwa
 import { useEmotionStore } from './store'
 import { EmotionSphereScene } from './EmotionSphereScene'
 import LoginScreen from './LoginScreen'
-import CheckInPage from './CheckInPage'
-import ShareWallPage from './ShareWallPage'
-import SermonJournalPage from './SermonJournalPage'
-import PrayerWallPage from './PrayerWallPage'
-import EvangelismPage from './EvangelismPage'
-import DevotionJournalPage from './DevotionJournalPage'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -92,9 +86,9 @@ function useAuth() {
   return { user, authLoading, setUser: updateUser, handleLogout }
 }
 
-export default function EmotionSphereTab({ user, visitStats, layoutItems, queryResult, topFeatures, topVerses, zoomLevel, loading, error, setLayoutItems, setHistoryItems, setSelectedFeature, setSelectedFeatureDetail, setSphereGuidance, setSpheresBiblicalExample, setQueryResult, setLanguageFilter, setTopFeatures, setTopVerses, setLoading, setError, historyItems, selectedFeature, selectedFeatureDetail, languageFilter }) {
-  
-          
+export default function EmotionSphereTab() {
+  const { user, setUser } = useAuth()
+
   const {
     layoutItems,
     historyItems,
@@ -137,6 +131,11 @@ export default function EmotionSphereTab({ user, visitStats, layoutItems, queryR
   const [sermonClickCount, setSermonClickCount] = useState(0)
   const [includeBiblicalExample, setIncludeBiblicalExample] = useState(true)
   const [comparisonMode, setComparisonMode] = useState(true)
+  const [showLogin, setShowLogin] = useState(false)
+  const [canInstall, setCanInstall] = useState(false)
+  const [installMessage, setInstallMessage] = useState('')
+  const [showIosInstallHint, setShowIosInstallHint] = useState(false)
+  const [visitStats, setVisitStats] = useState({ page_views: 0, unique_visitors: 0 })
         
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
@@ -149,6 +148,42 @@ export default function EmotionSphereTab({ user, visitStats, layoutItems, queryR
     fetchLayout().then((data) => setLayoutItems(data.items || [])).catch((err) => setError(String(err)))
     fetchHistory().then((data) => setHistoryItems(data.items || [])).catch(() => {})
   }, [setLayoutItems, setHistoryItems, setError])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadVisitStats() {
+      try {
+        const visitorId = getOrCreateVisitorId()
+        const stats = await trackStats(visitorId)
+        if (!cancelled) {
+          setVisitStats(stats)
+        }
+      } catch {
+        try {
+          const stats = await fetchStats()
+          if (!cancelled) {
+            setVisitStats(stats)
+          }
+        } catch {
+        }
+      }
+    }
+
+    loadVisitStats()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToInstallPrompt((available) => {
+      setCanInstall(available)
+    })
+    setShowIosInstallHint(isIosInstallable())
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -703,8 +738,23 @@ export default function EmotionSphereTab({ user, visitStats, layoutItems, queryR
     }
   }
 
-    if (showLogin) {
-      return (
+  if (showLogin) {
+    return (
+      <div className="mobile-app-shell">
+        <LoginScreen
+          onLogin={handleLoginSuccess}
+          onBack={() => {
+            setShowLogin(false)
+            setPendingPanel(null)
+            setLoginMessage('')
+          }}
+          message={loginMessage}
+        />
+      </div>
+    )
+  }
+
+  return (
 <div className="emotion-sphere-tab" style={{display: 'block'}}>
           <section className="mobile-pane mobile-sphere-pane" style={{display: 'flex'}}>
             <div className="mobile-sphere-stage">
@@ -1233,10 +1283,6 @@ export default function EmotionSphereTab({ user, visitStats, layoutItems, queryR
               </section>
             </div>
           </section>
-        </main>
-
         </div>
-)
-
-        </div>
-)
+  )
+}
