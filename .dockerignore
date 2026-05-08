@@ -1,0 +1,12 @@
+.git
+.gitignore
+.DS_Store
+.env
+.env.*
+.mypy_cache
+.netlify
+__pycache__
+*.pyc
+node_modules
+dist
+npm-debug.log

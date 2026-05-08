@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: emotion-sphere
+    runtime: docker
+    repo: https://github.com/zpcaiai/emotion-sphere
+    branch: main
+    region: singapore
+    autoDeployTrigger: commit
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://emotion-sphere.onrender.com
+      - key: PYTHONUNBUFFERED
+        value: "1"
