@@ -2,3 +2,5 @@ node_modules
 .vite
 .env
 .env.*
+__pycache__
+*.pyc

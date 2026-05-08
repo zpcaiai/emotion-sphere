@@ -29,18 +29,20 @@ STATS_FILE    = ROOT_DIR / 'visit_stats.json'
 STATS_LOCK    = threading.Lock()
 
 # ── 数据库配置 ─────────────────────────────────────────────────
-DATABASE_URL = os.getenv('DATABASE_URL', '')
-if not DATABASE_URL:
-    raise ValueError(
-        'DATABASE_URL environment variable is required.\n'
-        'Example: postgresql://user:password@localhost:5432/emotion_sphere'
-    )
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 
 _db_pool = None
 
 
 def _init_database():
     global _db_pool
+    if not DATABASE_URL:
+        print(
+            '[db] DATABASE_URL is not set; database-backed auth/session features are disabled.',
+            flush=True,
+        )
+        return False
+
     import psycopg2
     from psycopg2 import pool
     from psycopg2.extras import Json
@@ -49,9 +51,12 @@ def _init_database():
     ext.register_adapter(list, Json)
     _db_pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL)
     print('[db] PostgreSQL connection pool initialized', flush=True)
+    return True
 
 
 def _get_db():
+    if _db_pool is None:
+        raise RuntimeError('DATABASE_URL is not configured; database is unavailable')
     return _db_pool.getconn()
 
 
@@ -134,8 +139,9 @@ def _init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时初始化
-    _init_database()
-    _init_db()
+    has_database = _init_database()
+    if has_database:
+        _init_db()
 
     # 注入数据库函数到 auth 模块
     from backend.auth import init_db_functions
