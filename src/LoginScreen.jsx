@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import { loginWithEmail, registerWithEmail, sendEmailCode, sendResetCode, resetPassword } from './auth'
+import { useState, useEffect } from 'react'
+import { 
+  loginWithEmail, 
+  registerWithEmail, 
+  sendEmailCode, 
+  sendResetCode, 
+  resetPassword,
+  getRememberedEmail,
+  getRememberEmailOption,
+  setRememberedEmail,
+  setRememberEmailOption
+} from './auth'
 
 const cardStyle = {
   width: '100%',
@@ -127,6 +137,17 @@ function LoginForm({ email, setEmail, onLogin, onReset }) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [rememberEmail, setRememberEmail] = useState(false)
+
+  // Load remembered email on mount
+  useEffect(() => {
+    const remembered = getRememberedEmail()
+    const option = getRememberEmailOption()
+    if (remembered && option) {
+      setEmail(remembered)
+      setRememberEmail(true)
+    }
+  }, [setEmail])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -134,6 +155,13 @@ function LoginForm({ email, setEmail, onLogin, onReset }) {
     setLoading(true)
     try {
       const data = await loginWithEmail(email.trim(), password)
+      // Save or clear remembered email based on checkbox
+      setRememberEmailOption(rememberEmail)
+      if (rememberEmail) {
+        setRememberedEmail(email.trim())
+      } else {
+        setRememberedEmail('')
+      }
       if (data.user && onLogin) onLogin(data.user)
     } catch (err) {
       setError(err.message)
@@ -159,6 +187,32 @@ function LoginForm({ email, setEmail, onLogin, onReset }) {
           placeholder="输入密码" autoComplete="current-password"
           style={inputStyle}
         />
+      </div>
+      {/* 记住邮箱选项 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+        <input
+          type="checkbox"
+          id="remember-email"
+          checked={rememberEmail}
+          onChange={e => setRememberEmail(e.target.checked)}
+          style={{ 
+            width: '16px', 
+            height: '16px', 
+            cursor: 'pointer',
+            accentColor: '#007aff'
+          }}
+        />
+        <label 
+          htmlFor="remember-email" 
+          style={{ 
+            fontSize: '13px', 
+            color: 'rgba(255,255,255,0.6)', 
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
+        >
+          记住邮箱
+        </label>
       </div>
       {error && <p style={errorText}>{error}</p>}
       <button type="submit" disabled={loading} style={primaryBtnStyle(loading)}>

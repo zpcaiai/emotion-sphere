@@ -2,6 +2,8 @@ import { API_BASE } from './api'
 
 const TOKEN_KEY = 'bible-sphere-token'
 const USER_KEY = 'bible-sphere-user'
+const REMEMBERED_EMAIL_KEY = 'bible-sphere-remembered-email'
+const REMEMBER_EMAIL_OPTION_KEY = 'bible-sphere-remember-email-option'
 const BACKEND_DOWN_MSG = '后端服务不可用，请稍后重试'
 
 const authUrl = (path) => `${API_BASE}/auth${path}`
@@ -17,6 +19,31 @@ export function setToken(token) {
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+}
+
+// Remember email functions
+export function getRememberedEmail() {
+  return localStorage.getItem(REMEMBERED_EMAIL_KEY) || ''
+}
+
+export function setRememberedEmail(email) {
+  if (email) {
+    localStorage.setItem(REMEMBERED_EMAIL_KEY, email)
+  } else {
+    localStorage.removeItem(REMEMBERED_EMAIL_KEY)
+  }
+}
+
+export function clearRememberedEmail() {
+  localStorage.removeItem(REMEMBERED_EMAIL_KEY)
+}
+
+export function getRememberEmailOption() {
+  return localStorage.getItem(REMEMBER_EMAIL_OPTION_KEY) === 'true'
+}
+
+export function setRememberEmailOption(remember) {
+  localStorage.setItem(REMEMBER_EMAIL_OPTION_KEY, remember ? 'true' : 'false')
 }
 
 export function getCachedUser() {
@@ -222,4 +249,163 @@ export async function resetPassword(email, code, password) {
   const data = await res.json()
   if (!res.ok) throw new Error(data.detail || 'Password reset failed')
   return data
+}
+
+// ==================== WeChat Mini Program Login ====================
+
+/**
+ * Check if running inside WeChat Mini Program
+ */
+export function isWechatMiniProgram() {
+  // wx object exists in WeChat Mini Program environment
+  return typeof wx !== 'undefined' && wx.login && typeof wx.login === 'function'
+}
+
+/**
+ * Login with WeChat Mini Program
+ * This function should be called in WeChat Mini Program environment
+ * @returns {Promise<{token: string, user: object}>}
+ */
+export async function loginWithWechatMiniProgram() {
+  if (!isWechatMiniProgram()) {
+    throw new Error('不在微信小程序环境中')
+  }
+
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success: async (res) => {
+        if (res.code) {
+          try {
+            // Send code to backend
+            const response = await fetch(authUrl('/wechat/miniprogram/login'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                code: res.code,
+                appid: '' // Backend will use configured appid
+              }),
+            })
+            
+            const contentType = response.headers.get('content-type') || ''
+            if (!contentType.includes('application/json')) {
+              throw new Error(BACKEND_DOWN_MSG)
+            }
+            
+            const data = await response.json()
+            if (!response.ok) {
+              throw new Error(data.detail || '微信小程序登录失败')
+            }
+            
+            if (data.token) {
+              setToken(data.token)
+              if (data.user) setCachedUser(data.user)
+            }
+            
+            resolve(data)
+          } catch (err) {
+            reject(err)
+          }
+        } else {
+          reject(new Error(res.errMsg || '微信登录失败'))
+        }
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg || '微信登录调用失败'))
+      }
+    })
+  })
+}
+
+/**
+ * Get WeChat Mini Program user profile (nickname, avatar)
+ * Requires user authorization in Mini Program
+ * @returns {Promise<{nickName: string, avatarUrl: string, ...}>}
+ */
+export function getWechatMiniProgramUserProfile() {
+  return new Promise((resolve, reject) => {
+    if (!isWechatMiniProgram()) {
+      reject(new Error('不在微信小程序环境中'))
+      return
+    }
+    
+    wx.getUserProfile({
+      desc: '用于完善用户资料',
+      success: (res) => {
+        resolve(res.userInfo)
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg || '获取用户信息失败'))
+      }
+    })
+  })
+}
+
+/**
+ * Update user info with Mini Program profile after login
+ * @param {object} userInfo - From wx.getUserProfile
+ */
+export async function updateUserWithMiniProgramInfo(userInfo) {
+  const token = getToken()
+  if (!token) {
+    throw new Error('未登录')
+  }
+  
+  const res = await fetch(authUrl('/wechat/miniprogram/update-profile'), {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      nickname: userInfo.nickName,
+      avatar: userInfo.avatarUrl,
+      gender: userInfo.gender,
+      city: userInfo.city,
+      province: userInfo.province,
+      country: userInfo.country
+    }),
+  })
+  
+  const contentType = res.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error(BACKEND_DOWN_MSG)
+  }
+  
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || '更新用户信息失败')
+  
+  // Update cached user
+  if (data.user) {
+    setCachedUser(data.user)
+  }
+  
+  return data
+}
+
+/**
+ * Unified login entry - automatically detect environment and choose appropriate method
+ * @param {Object} options
+ * @param {string} options.frontendUrl - Frontend URL for redirect
+ * @returns {Promise<void>}
+ */
+export async function unifiedLogin(options = {}) {
+  const { frontendUrl } = options
+  
+  if (isWechatMiniProgram()) {
+    // WeChat Mini Program environment
+    return loginWithWechatMiniProgram()
+  } else if (isWechatBrowser()) {
+    // WeChat built-in browser (mobile H5)
+    redirectToWechatMobileLogin({ scope: 'snsapi_userinfo', frontendUrl })
+    // Return a pending promise as page will redirect
+    return new Promise(() => {})
+  } else if (isMobileDevice()) {
+    // Other mobile browser - use H5 or redirect to native app
+    redirectToWechatMobileLogin({ scope: 'snsapi_userinfo', frontendUrl })
+    return new Promise(() => {})
+  } else {
+    // PC - use QR code
+    redirectToWechatLogin()
+    return new Promise(() => {})
+  }
 }
