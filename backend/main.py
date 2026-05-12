@@ -202,6 +202,11 @@ app.include_router(auth_router)
 
 # ── 健康检查 ──────────────────────────────────────────────────
 
+@app.get('/')
+def root():
+    return {'ok': True, 'service': 'emotion-sphere-backend'}
+
+
 @app.get('/api/health')
 def health():
     return {'ok': True, 'service': 'emotion-sphere-backend'}
