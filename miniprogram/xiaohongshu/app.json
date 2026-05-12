@@ -1,0 +1,9 @@
+{
+  "pages": ["pages/index/index"],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#0a0a1e",
+    "navigationBarTitleText": "情感星球",
+    "navigationBarTextStyle": "white"
+  }
+}

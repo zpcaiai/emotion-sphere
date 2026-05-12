@@ -607,3 +607,18 @@ export async function updateUserProfile(payload, token) {
   console.log(`[api] updateUserProfile ok nickname=${data.nickname}`)
   return data
 }
+
+export async function generateStory(emotion) {
+  const response = await fetch(`${API_BASE}/story`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emotion }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行（请先启动 backend/main.py）')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '故事生成失败')
+  return data
+}

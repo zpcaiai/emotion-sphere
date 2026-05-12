@@ -239,6 +239,29 @@ def get_feature(key: str = ''):
     return item
 
 
+@app.post('/api/story')
+async def generate_story(request: Request):
+    body = await request.json()
+    emotion = str(body.get('emotion', '')).strip()
+    if not emotion:
+        raise HTTPException(status_code=400, detail='Missing emotion')
+    try:
+        from query_emotion_verses import call_chat
+        system_prompt = (
+            '你是一位充满智慧与温暖的属灵故事讲述者。'
+            '请根据用户提供的情绪，写一段200-300字的励志属灵小故事，'
+            '故事要有具体场景、人物内心挣扎、转折与盼望，文字优美流畅，能触动人心。'
+            '只输出故事正文，不加任何标题或说明。'
+        )
+        story = await asyncio.to_thread(call_chat, system_prompt, f'情绪：{emotion}')
+        if not story:
+            return {'story': f'愿在"{emotion}"中，你找到一丝平静与力量。', 'degraded': True}
+        return {'story': story}
+    except Exception as exc:
+        print(f'[api/story] error: {exc}', flush=True)
+        return {'story': f'愿在"{emotion}"中，你找到一丝平静与力量。', 'degraded': True}
+
+
 @app.post('/api/guidance')
 async def get_guidance(request: Request):
     body = await request.json()

@@ -1,0 +1,88 @@
+<view class="container">
+  <!-- 标题 -->
+  <view class="header">
+    <text class="title">✨ 情感星球</text>
+    <text class="subtitle">以圣经的光照亮你的情绪</text>
+  </view>
+
+  <!-- 情绪选择 -->
+  <view class="section">
+    <text class="section-title">选择你的情绪</text>
+    <scroll-view class="emotion-grid" scroll-x="false">
+      <view
+        wx:for="{{emotions}}"
+        wx:key="label"
+        class="emotion-chip {{selectedEmotion === item.label ? 'selected' : ''}}"
+        bindtap="selectEmotion"
+        data-emotion="{{item.label}}"
+      >
+        <text class="chip-label">{{item.zh_label || item.label}}</text>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 查询框 -->
+  <view class="section">
+    <text class="section-title">描述你的感受</text>
+    <textarea
+      class="query-input"
+      value="{{queryText}}"
+      placeholder="例如：我感到很孤独，需要一些安慰…"
+      bindinput="onQueryInput"
+      maxlength="200"
+    />
+    <button
+      class="primary-btn"
+      bindtap="runQuery"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+    >
+      {{loading ? '查询中…' : '🔍 查询圣经经文'}}
+    </button>
+  </view>
+
+  <!-- 结果 -->
+  <view wx:if="{{verses.length > 0}}" class="section">
+    <text class="section-title">相关经文</text>
+    <view
+      wx:for="{{verses}}"
+      wx:key="pk_id"
+      class="verse-card"
+    >
+      <text class="verse-ref">{{item.book_name}} {{item.chapter}}:{{item.verse}}</text>
+      <text class="verse-text">{{item.raw_text}}</text>
+    </view>
+  </view>
+
+  <!-- 降级提示 -->
+  <view wx:if="{{degraded}}" class="degraded-tip">
+    <text>⚠️ 服务暂时繁忙，请稍后重试</text>
+  </view>
+
+  <!-- 故事卡片 -->
+  <view wx:if="{{showStory}}" class="story-overlay" bindtap="closeStory">
+    <view class="story-card" catchtap="">
+      <view class="story-header">
+        <text class="story-title">✨ {{selectedEmotion}} · 励志故事</text>
+        <text class="story-close" bindtap="closeStory">×</text>
+      </view>
+      <scroll-view class="story-body" scroll-y>
+        <text wx:if="{{storyLoading}}" class="story-loading">正在生成故事…</text>
+        <text wx:if="{{storyError}}" class="story-error">{{storyError}}</text>
+        <text wx:if="{{storyText}}" class="story-text">{{storyText}}</text>
+      </scroll-view>
+      <view class="story-footer">
+        <button class="secondary-btn" bindtap="retryStory" disabled="{{storyLoading}}">🔄 重新生成</button>
+        <button class="secondary-btn" bindtap="speakStory" disabled="{{storyLoading || !storyText}}">
+          {{speaking ? '⏹ 停止' : '▶ 朗读'}}
+        </button>
+        <button class="primary-btn" bindtap="closeStory">关闭</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 生成故事按钮（有情绪选中时显示） -->
+  <view wx:if="{{selectedEmotion}}" class="fab-story" bindtap="openStory">
+    <text>✨ 故事</text>
+  </view>
+</view>

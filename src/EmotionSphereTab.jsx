@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
-import { fetchBiblicalExample, fetchFeatureDetail, fetchGuidance, fetchHistory, fetchLayout, fetchSermon, fetchStats, runQuery, trackStats, updateUserProfile } from './api'
+import { fetchBiblicalExample, fetchFeatureDetail, fetchGuidance, fetchHistory, fetchLayout, fetchSermon, fetchStats, runQuery, trackStats, updateUserProfile, generateStory } from './api'
 import { fetchCurrentUser, getCachedUser, getToken, logout, setCachedUser, clearToken } from './auth'
 import { isIosInstallable, promptInstall, subscribeToInstallPrompt } from './pwa'
 import { useEmotionStore } from './store'
 import { EmotionSphereScene } from './EmotionSphereScene'
 import LoginScreen from './LoginScreen'
+import StoryCard from './StoryCard'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -136,6 +137,7 @@ export default function EmotionSphereTab() {
   const [installMessage, setInstallMessage] = useState('')
   const [showIosInstallHint, setShowIosInstallHint] = useState(false)
   const [visitStats, setVisitStats] = useState({ page_views: 0, unique_visitors: 0 })
+  const [storyEmotion, setStoryEmotion] = useState(null)
         
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
@@ -755,6 +757,7 @@ export default function EmotionSphereTab() {
   }
 
   return (
+<>
 <div className="emotion-sphere-tab" style={{display: 'block'}}>
           <section className="mobile-pane mobile-sphere-pane" style={{display: 'flex'}}>
             <div className="mobile-sphere-stage">
@@ -1284,5 +1287,7 @@ export default function EmotionSphereTab() {
             </div>
           </section>
         </div>
-  )
+      {storyEmotion && <StoryCard emotion={storyEmotion} onClose={() => setStoryEmotion(null)} />}
+</>
+  );
 }
