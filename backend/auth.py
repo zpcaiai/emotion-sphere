@@ -318,20 +318,27 @@ def _send_email(to: str, subject: str, body: str) -> None:
             print(f'[email] Resend failed: {exc}', flush=True)
 
     # 3. SMTP fallback
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASS and SMTP_FROM):
+        raise RuntimeError('No email service configured (SendGrid/Resend/SMTP all unavailable)')
     msg = MIMEText(body, 'plain', 'utf-8')
     msg['Subject'] = subject
     msg['From'] = SMTP_FROM
     msg['To'] = to
-    if SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as s:
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_FROM, [to], msg.as_string())
-    else:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
-            s.ehlo()
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_FROM, [to], msg.as_string())
+    try:
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+                s.ehlo()
+                s.starttls()
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        print(f'[email] SMTP OK to {to}', flush=True)
+    except smtplib.SMTPException as exc:
+        print(f'[email] SMTP failed: {exc}', flush=True)
+        raise
 
 
 # ── Pydantic 模型 ──────────────────────────────────────────────
@@ -389,19 +396,29 @@ async def wxapp_login(request: Request, payload: WxappLoginRequest):
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, params=params, timeout=10)
+            resp.raise_for_status()
             data = resp.json()
+    except httpx.TimeoutException as exc:
+        _security_audit('WXAPP_LOGIN_FAILED', ip=client_ip, details={'reason': 'timeout', 'error': str(exc)}, success=False)
+        raise HTTPException(status_code=503, detail='微信服务请求超时，请稍后重试')
+    except httpx.NetworkError as exc:
+        _security_audit('WXAPP_LOGIN_FAILED', ip=client_ip, details={'reason': 'network_error', 'error': str(exc)}, success=False)
+        raise HTTPException(status_code=503, detail='无法连接微信服务，请检查网络后重试')
     except Exception as exc:
         _security_audit('WXAPP_LOGIN_FAILED', ip=client_ip, details={'reason': 'request_failed', 'error': str(exc)}, success=False)
-        raise HTTPException(status_code=500, detail='Failed to connect to WeChat API')
+        raise HTTPException(status_code=503, detail='微信登录服务暂时不可用，请稍后重试')
+
+    if not isinstance(data, dict):
+        _security_audit('WXAPP_LOGIN_FAILED', ip=client_ip, details={'reason': 'invalid_response'}, success=False)
+        raise HTTPException(status_code=503, detail='微信服务返回异常，请稍后重试')
 
     if 'errcode' in data and data['errcode'] != 0:
         _security_audit('WXAPP_LOGIN_FAILED', ip=client_ip, details={'reason': 'wechat_error', 'errcode': data['errcode']}, success=False)
-        raise HTTPException(status_code=401, detail=f"WeChat error: {data.get('errmsg', '')}")
-        
+        raise HTTPException(status_code=401, detail=f"微信登录失败：{data.get('errmsg', str(data['errcode']))}")
+
     openid = data.get('openid')
-    
     if not openid:
-        raise HTTPException(status_code=401, detail='Failed to get openid from WeChat')
+        raise HTTPException(status_code=401, detail='未能从微信获取用户标识，请重试')
 
     conn = _get_db()
     user_record = None

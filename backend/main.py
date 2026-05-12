@@ -239,6 +239,28 @@ def get_feature(key: str = ''):
     return item
 
 
+@app.post('/api/guidance')
+async def get_guidance(request: Request):
+    body = await request.json()
+    query = str(body.get('query', '')).strip()
+    if not query:
+        raise HTTPException(status_code=400, detail='Missing query')
+    try:
+        from query_emotion_verses import assess_psychological_state
+        result = await asyncio.to_thread(assess_psychological_state, query)
+        return result
+    except Exception as exc:
+        print(f'[api/guidance] error: {exc}', flush=True)
+        return {
+            'core_emotions': [],
+            'psychological_assessment': '灵性引导服务暂时不可用，请稍后再试。',
+            'coping_suggestions': [],
+            'spiritual_guidance': '',
+            'core_need': '',
+            'service_unavailable': True,
+        }
+
+
 # ── 查询接口 ──────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
@@ -270,8 +292,7 @@ async def run_query(payload: QueryRequest):
             rerank_weight=payload.rerankWeight,
         )
         result['query_latency_ms'] = round((time.perf_counter() - started_at) * 1000, 2)
-
-        # 保存历史
+        # 保存历史（非关键，失败不影响响应）
         try:
             from web_emotion_query import save_history_entry
             save_history_entry(
@@ -280,10 +301,24 @@ async def run_query(payload: QueryRequest):
             )
         except Exception:
             pass
-
         return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        err_msg = str(exc)
+        print(f'[api/query] error: {err_msg}', flush=True)
+        # 外部服务不可用时返回降级结果而非崩溃
+        if any(kw in err_msg.lower() for kw in ('connection', 'timeout', 'ssl', '502', '503', '504', '429')):
+            return {
+                'query_text': payload.query,
+                'selected_emotions': [],
+                'verse_summary': {'cuv': [], 'esv': []},
+                'rerank': {'enabled': False, 'applied': False},
+                'degraded': True,
+                'error': '向量检索服务暂时不可用，请稍后重试',
+                'query_latency_ms': 0,
+            }
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 @app.get('/api/history')
@@ -295,18 +330,6 @@ def get_history():
         return {'items': [], 'total': 0}
 
 
-@app.post('/api/guidance')
-async def get_guidance(request: Request):
-    body = await request.json()
-    query = str(body.get('query', '')).strip()
-    if not query:
-        raise HTTPException(status_code=400, detail='Missing query')
-    try:
-        from query_emotion_verses import assess_psychological_state
-        result = await asyncio.to_thread(assess_psychological_state, query)
-        return result
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── 访问统计 ──────────────────────────────────────────────────

@@ -155,8 +155,16 @@ def fetch_biblical_example(query_text: str) -> dict:
         "temperature": 0.7,
         "max_tokens": 500,
     }
-    data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
-    raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    try:
+        data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
+        raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    except Exception as exc:
+        print(f'[biblical_example] LLM service unavailable: {exc}', flush=True)
+        return {
+            "person": "", "era": "", "similar_situation": "",
+            "biblical_response": "", "key_verse": "", "application": "",
+            "service_unavailable": True,
+        }
     try:
         result = json.loads(raw)
         llm_cache.set(cache_key, result)
@@ -164,16 +172,11 @@ def fetch_biblical_example(query_text: str) -> dict:
         return result
     except json.JSONDecodeError:
         print('[biblical_example] JSON parse error, returning raw text', flush=True)
-        error_result = {
-            "person": "",
-            "era": "",
-            "similar_situation": raw,
-            "biblical_response": "",
-            "key_verse": "",
-            "application": "",
+        return {
+            "person": "", "era": "", "similar_situation": raw,
+            "biblical_response": "", "key_verse": "", "application": "",
             "parse_error": True,
         }
-        return error_result
 
 
 SERMON_PROMPT = """你是一位深植于改革宗传统、受过神学训练、具有牧养心肠的传道人。
@@ -240,8 +243,12 @@ def generate_sermon(query_text: str) -> dict:
         "temperature": 0.9,
         "max_tokens": 2800,
     }
-    data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
-    raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    try:
+        data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
+        raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    except Exception as exc:
+        print(f'[sermon] LLM service unavailable: {exc}', flush=True)
+        return {"title": "讲章生成暂不可用", "introduction": "", "service_unavailable": True}
     try:
         result = json.loads(raw)
         llm_cache.set(cache_key, result)
@@ -249,12 +256,7 @@ def generate_sermon(query_text: str) -> dict:
         return result
     except json.JSONDecodeError:
         print('[sermon] JSON parse error, returning raw intro text', flush=True)
-        error_result = {
-            "title": "讲章",
-            "introduction": raw,
-            "parse_error": True,
-        }
-        return error_result
+        return {"title": "讲章", "introduction": raw, "parse_error": True}
 
 
 def post_with_retry(url: str, payload: dict, headers: dict) -> dict:
@@ -346,8 +348,13 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
             "input": batch,
             "encoding_format": "float",
         }
-        data = post_with_retry(SILICONFLOW_EMBEDDING_URL, payload, siliconflow_headers())
-        all_embeddings.extend(item["embedding"] for item in data["data"])
+        try:
+            data = post_with_retry(SILICONFLOW_EMBEDDING_URL, payload, siliconflow_headers())
+            all_embeddings.extend(item["embedding"] for item in data["data"])
+        except Exception as exc:
+            print(f'[embeddings] API failed for batch {start//EMBEDDING_BATCH_SIZE + 1}: {exc}; using zero vectors', flush=True)
+            dim = 1024
+            all_embeddings.extend([[0.0] * dim] * len(batch))
     print(f'[embeddings] done: {len(all_embeddings)} embeddings received', flush=True)
     embeddings = np.asarray(all_embeddings, dtype=np.float32)
     return l2_normalize(embeddings)
@@ -431,9 +438,12 @@ def load_or_build_feature_embeddings(
         embeddings = get_embeddings(texts)
         for feature, embedding in zip(missing_features, embeddings, strict=True):
             cache[feature_key(feature)] = embedding.tolist()
-        with open(cache_path, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=2)
-        print(f'[embeddings] cache updated and saved: {len(cache)} total entries', flush=True)
+        try:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False, indent=2)
+            print(f'[embeddings] cache updated and saved: {len(cache)} total entries', flush=True)
+        except Exception as exc:
+            print(f'[embeddings] cache save failed (non-fatal): {exc}', flush=True)
     else:
         print(f'[embeddings] all {len(features)} features found in cache, no API call needed', flush=True)
 
@@ -453,8 +463,26 @@ def select_top_features(
     top_k: int = DEFAULT_TOP_FEATURES,
 ) -> list[dict]:
     print(f'[features] selecting top {top_k} features for query: {query_text[:60]}...', flush=True)
-    query_vec = get_embeddings([query_text])
-    scores = np.dot(feature_embeddings, query_vec[0])
+    try:
+        query_vec = get_embeddings([query_text])
+        scores = np.dot(feature_embeddings, query_vec[0])
+    except Exception as exc:
+        print(f'[features] embedding failed, falling back to random selection: {exc}', flush=True)
+        import random
+        indices = list(range(len(features)))
+        random.shuffle(indices)
+        ranked_indices = indices[:top_k]
+        selected = []
+        for idx in ranked_indices:
+            f = features[idx]
+            selected.append({
+                "feature_id": f.get("feature_id"), "layer": f.get("layer"),
+                "model_id": f.get("model_id"), "source_keyword": f.get("source_keyword"),
+                "explanation": f.get("explanation"), "similarity": 0.0,
+                "feature_key": feature_key(f), "degraded": True,
+            })
+        print(f'[features] degraded selection: {[f["feature_key"] for f in selected]}', flush=True)
+        return selected
     ranked_indices = np.argsort(scores)[::-1][:top_k]
     selected = []
     for idx in ranked_indices:
@@ -676,7 +704,6 @@ def call_chat(system_prompt: str, user_message: str) -> str:
     cached = llm_cache.get(cache_key)
     if cached:
         return cached
-    
     payload = {
         "model": SILICONFLOW_CHAT_MODEL,
         "messages": [
@@ -686,10 +713,14 @@ def call_chat(system_prompt: str, user_message: str) -> str:
         "temperature": 0.7,
         "max_tokens": 600,
     }
-    data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
-    result = data["choices"][0]["message"]["content"].strip()
-    llm_cache.set(cache_key, result)
-    return result
+    try:
+        data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
+        result = data["choices"][0]["message"]["content"].strip()
+        llm_cache.set(cache_key, result)
+        return result
+    except Exception as exc:
+        print(f'[call_chat] LLM service unavailable: {exc}', flush=True)
+        return ""
 
 
 def assess_psychological_state(query_text: str) -> dict:
@@ -711,8 +742,16 @@ def assess_psychological_state(query_text: str) -> dict:
         "temperature": 0.7,
         "max_tokens": 400,
     }
-    data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
-    raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    try:
+        data = post_with_retry(SILICONFLOW_CHAT_URL, payload, siliconflow_headers())
+        raw = _strip_markdown_json(data["choices"][0]["message"]["content"])
+    except Exception as exc:
+        print(f'[guidance] LLM service unavailable: {exc}', flush=True)
+        return {
+            "core_emotions": [], "psychological_assessment": "灵性引导服务暂时不可用，请稍后再试。",
+            "coping_suggestions": [], "spiritual_guidance": "", "core_need": "",
+            "service_unavailable": True,
+        }
     try:
         result = json.loads(raw)
         llm_cache.set(cache_key, result)
@@ -720,15 +759,11 @@ def assess_psychological_state(query_text: str) -> dict:
         return result
     except json.JSONDecodeError:
         print(f'[guidance] JSON parse error, returning raw text', flush=True)
-        error_result = {
-            "core_emotions": [],
-            "psychological_assessment": raw,
-            "coping_suggestions": [],
-            "spiritual_guidance": "",
-            "core_need": "",
+        return {
+            "core_emotions": [], "psychological_assessment": raw,
+            "coping_suggestions": [], "spiritual_guidance": "", "core_need": "",
             "parse_error": True,
         }
-        return error_result
 
 
 def query_emotion_verses(
