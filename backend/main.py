@@ -127,6 +127,128 @@ def _init_db():
                 'CREATE INDEX IF NOT EXISTS idx_user_tokens_expires ON user_tokens(expires_at)'
             )
 
+            # 代祷墙
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS prayers (
+                    id           SERIAL PRIMARY KEY,
+                    user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    nickname     VARCHAR(100) DEFAULT '',
+                    content      TEXT NOT NULL,
+                    is_anonymous BOOLEAN DEFAULT FALSE,
+                    amen_count   INTEGER DEFAULT 0,
+                    is_deleted   BOOLEAN DEFAULT FALSE,
+                    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_prayers_user ON prayers(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_prayers_created ON prayers(created_at DESC)')
+
+            # 代祷点赞（防重复amen）
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS prayer_amens (
+                    prayer_id  INTEGER REFERENCES prayers(id) ON DELETE CASCADE,
+                    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (prayer_id, user_id)
+                )
+            ''')
+
+            # 传福音祷告墙
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS evangelism_prayers (
+                    id           SERIAL PRIMARY KEY,
+                    user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    nickname     VARCHAR(100) DEFAULT '',
+                    content      TEXT NOT NULL,
+                    is_anonymous BOOLEAN DEFAULT FALSE,
+                    amen_count   INTEGER DEFAULT 0,
+                    is_deleted   BOOLEAN DEFAULT FALSE,
+                    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_evangelism_user ON evangelism_prayers(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_evangelism_created ON evangelism_prayers(created_at DESC)')
+
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS evangelism_amens (
+                    prayer_id  INTEGER REFERENCES evangelism_prayers(id) ON DELETE CASCADE,
+                    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (prayer_id, user_id)
+                )
+            ''')
+
+            # 灵修日记
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS devotion_journals (
+                    id         SERIAL PRIMARY KEY,
+                    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date       DATE NOT NULL,
+                    title      VARCHAR(200) DEFAULT '',
+                    content    TEXT DEFAULT '',
+                    verse      VARCHAR(200) DEFAULT '',
+                    reflection TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, date)
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_devotion_user ON devotion_journals(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_devotion_date ON devotion_journals(user_id, date DESC)')
+
+            # 主日讲道笔记
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS sermon_journals (
+                    id         SERIAL PRIMARY KEY,
+                    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date       DATE NOT NULL,
+                    title      VARCHAR(200) DEFAULT '',
+                    preacher   VARCHAR(100) DEFAULT '',
+                    verse      VARCHAR(200) DEFAULT '',
+                    content    TEXT DEFAULT '',
+                    reflection TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, date)
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_sermon_user ON sermon_journals(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_sermon_date ON sermon_journals(user_id, date DESC)')
+
+            # 个人日记（私密）
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS personal_notes (
+                    id         SERIAL PRIMARY KEY,
+                    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date       DATE NOT NULL,
+                    title      VARCHAR(200) DEFAULT '',
+                    content    TEXT DEFAULT '',
+                    mood       VARCHAR(50) DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, date)
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_personal_user ON personal_notes(user_id)')
+
+            # 签到 / 分享墙
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS checkins (
+                    id            SERIAL PRIMARY KEY,
+                    user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    nickname      VARCHAR(100) DEFAULT '',
+                    emotion_label VARCHAR(100) DEFAULT '',
+                    emotion_key   VARCHAR(200) DEFAULT '',
+                    note          TEXT DEFAULT '',
+                    is_anonymous  BOOLEAN DEFAULT FALSE,
+                    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_checkins_created ON checkins(created_at DESC)')
+
             conn.commit()
     finally:
         _release_db(conn)
@@ -395,6 +517,600 @@ def track_stats(payload: VisitTrackRequest):
         stats['unique_visitors'] = len(visitor_ids)
         _save_stats(stats)
     return {'page_views': stats['page_views'], 'unique_visitors': stats['unique_visitors']}
+
+
+# ── 辅助：从请求中获取已登录用户 ID ──────────────────────────────
+
+def _require_user(request: Request):
+    from backend.auth import get_session_user
+    user = get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail='请先登录')
+    return user
+
+
+def _optional_user(request: Request):
+    from backend.auth import get_session_user
+    return get_session_user(request)
+
+
+# ── 用户资料 ──────────────────────────────────────────────────
+
+class UpdateProfileRequest(BaseModel):
+    nickname: str = Field(default='', max_length=64)
+    avatar: str = Field(default='', max_length=500)
+
+
+@app.put('/api/user/profile')
+def update_user_profile(payload: UpdateProfileRequest, request: Request):
+    user = _require_user(request)
+    uid = user['id']
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE users SET nickname=%s, avatar=%s, updated_at=NOW() WHERE id=%s '
+                'RETURNING id, email, nickname, avatar, login_type',
+                (payload.nickname.strip() or user.get('nickname', ''),
+                 payload.avatar.strip() or user.get('avatar', ''), uid)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': row[0], 'email': row[1],
+                'nickname': row[2], 'avatar': row[3], 'login_type': row[4]}
+    finally:
+        _release_db(conn)
+
+
+# ── 代祷墙 /api/prayers ────────────────────────────────────────
+
+@app.get('/api/prayers')
+def list_prayers(limit: int = 40, offset: int = 0, request: Request = None):
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT p.id, p.user_id, p.nickname, p.content, p.is_anonymous,
+                          p.amen_count, p.created_at,
+                          u.nickname as real_nickname, u.avatar
+                   FROM prayers p LEFT JOIN users u ON u.id = p.user_id
+                   WHERE p.is_deleted = FALSE
+                   ORDER BY p.created_at DESC LIMIT %s OFFSET %s''',
+                (limit, offset)
+            )
+            rows = cur.fetchall()
+            cur.execute('SELECT COUNT(*) FROM prayers WHERE is_deleted=FALSE')
+            total = cur.fetchone()[0]
+        items = []
+        for r in rows:
+            nick = '匿名' if r[4] else (r[7] or r[2] or '用户')
+            avatar = '' if r[4] else (r[8] or '')
+            items.append({'id': r[0], 'user_id': r[1], 'nickname': nick,
+                          'content': r[3], 'is_anonymous': r[4],
+                          'amen_count': r[5],
+                          'created_at': r[6].isoformat() if r[6] else None,
+                          'avatar': avatar})
+        return {'items': items, 'total': total}
+    finally:
+        _release_db(conn)
+
+
+class PrayerSubmitRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+    is_anonymous: bool = False
+
+
+@app.post('/api/prayers')
+def submit_prayer(payload: PrayerSubmitRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO prayers (user_id, nickname, content, is_anonymous) '
+                'VALUES (%s, %s, %s, %s) RETURNING id, created_at',
+                (user['id'], user.get('nickname', ''),
+                 payload.content.strip(), payload.is_anonymous)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': row[0], 'created_at': row[1].isoformat()}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/prayers/{prayer_id}/amen')
+def amen_prayer(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO prayer_amens (prayer_id, user_id) VALUES (%s,%s) '
+                'ON CONFLICT DO NOTHING',
+                (prayer_id, user['id'])
+            )
+            cur.execute(
+                'UPDATE prayers SET amen_count = (SELECT COUNT(*) FROM prayer_amens WHERE prayer_id=%s) WHERE id=%s RETURNING amen_count',
+                (prayer_id, prayer_id)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'amen_count': row[0] if row else 0}
+    finally:
+        _release_db(conn)
+
+
+@app.put('/api/prayers/{prayer_id}')
+def update_prayer(prayer_id: int, payload: PrayerSubmitRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE prayers SET content=%s, updated_at=NOW() WHERE id=%s AND user_id=%s',
+                (payload.content.strip(), prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/prayers/{prayer_id}')
+def delete_prayer(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE prayers SET is_deleted=TRUE WHERE id=%s AND user_id=%s',
+                (prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/prayers/{prayer_id}/restore')
+def restore_prayer(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE prayers SET is_deleted=FALSE WHERE id=%s AND user_id=%s',
+                (prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+# ── 传福音祷告墙 /api/evangelism ──────────────────────────────
+
+@app.get('/api/evangelism')
+def list_evangelism(limit: int = 40, offset: int = 0):
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT p.id, p.user_id, p.nickname, p.content, p.is_anonymous,
+                          p.amen_count, p.created_at,
+                          u.nickname as real_nickname, u.avatar
+                   FROM evangelism_prayers p LEFT JOIN users u ON u.id = p.user_id
+                   WHERE p.is_deleted = FALSE
+                   ORDER BY p.created_at DESC LIMIT %s OFFSET %s''',
+                (limit, offset)
+            )
+            rows = cur.fetchall()
+            cur.execute('SELECT COUNT(*) FROM evangelism_prayers WHERE is_deleted=FALSE')
+            total = cur.fetchone()[0]
+        items = []
+        for r in rows:
+            nick = '匿名' if r[4] else (r[7] or r[2] or '用户')
+            avatar = '' if r[4] else (r[8] or '')
+            items.append({'id': r[0], 'user_id': r[1], 'nickname': nick,
+                          'content': r[3], 'is_anonymous': r[4],
+                          'amen_count': r[5],
+                          'created_at': r[6].isoformat() if r[6] else None,
+                          'avatar': avatar})
+        return {'items': items, 'total': total}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/evangelism')
+def submit_evangelism(payload: PrayerSubmitRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO evangelism_prayers (user_id, nickname, content, is_anonymous) '
+                'VALUES (%s,%s,%s,%s) RETURNING id, created_at',
+                (user['id'], user.get('nickname', ''),
+                 payload.content.strip(), payload.is_anonymous)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': row[0], 'created_at': row[1].isoformat()}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/evangelism/{prayer_id}/amen')
+def amen_evangelism(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO evangelism_amens (prayer_id, user_id) VALUES (%s,%s) ON CONFLICT DO NOTHING',
+                (prayer_id, user['id'])
+            )
+            cur.execute(
+                'UPDATE evangelism_prayers SET amen_count=(SELECT COUNT(*) FROM evangelism_amens WHERE prayer_id=%s) WHERE id=%s RETURNING amen_count',
+                (prayer_id, prayer_id)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'amen_count': row[0] if row else 0}
+    finally:
+        _release_db(conn)
+
+
+@app.put('/api/evangelism/{prayer_id}')
+def update_evangelism(prayer_id: int, payload: PrayerSubmitRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE evangelism_prayers SET content=%s, updated_at=NOW() WHERE id=%s AND user_id=%s',
+                (payload.content.strip(), prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/evangelism/{prayer_id}')
+def delete_evangelism(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE evangelism_prayers SET is_deleted=TRUE WHERE id=%s AND user_id=%s',
+                (prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/evangelism/{prayer_id}/restore')
+def restore_evangelism(prayer_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE evangelism_prayers SET is_deleted=FALSE WHERE id=%s AND user_id=%s',
+                (prayer_id, user['id'])
+            )
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+# ── 灵修日记 /api/devotion/journals ──────────────────────────
+
+class DevotionJournalRequest(BaseModel):
+    date: str = Field(min_length=1, max_length=20)
+    title: str = Field(default='', max_length=200)
+    content: str = Field(default='')
+    verse: str = Field(default='', max_length=200)
+    reflection: str = Field(default='')
+
+
+@app.get('/api/devotion/journals')
+def list_devotion_journals(limit: int = 50, offset: int = 0, request: Request = None):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, date, title, content, verse, reflection, created_at, updated_at '
+                'FROM devotion_journals WHERE user_id=%s ORDER BY date DESC LIMIT %s OFFSET %s',
+                (user['id'], limit, offset)
+            )
+            rows = cur.fetchall()
+            cur.execute('SELECT COUNT(*) FROM devotion_journals WHERE user_id=%s', (user['id'],))
+            total = cur.fetchone()[0]
+        items = [{'id': r[0], 'date': str(r[1]), 'title': r[2], 'content': r[3],
+                  'verse': r[4], 'reflection': r[5],
+                  'created_at': r[6].isoformat() if r[6] else None,
+                  'updated_at': r[7].isoformat() if r[7] else None} for r in rows]
+        return {'items': items, 'total': total}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/devotion/journals')
+def save_devotion_journal(payload: DevotionJournalRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO devotion_journals (user_id, date, title, content, verse, reflection)
+                   VALUES (%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (user_id, date) DO UPDATE
+                   SET title=EXCLUDED.title, content=EXCLUDED.content,
+                       verse=EXCLUDED.verse, reflection=EXCLUDED.reflection, updated_at=NOW()
+                   RETURNING id, date, title, content, verse, reflection, created_at, updated_at''',
+                (user['id'], payload.date, payload.title, payload.content,
+                 payload.verse, payload.reflection)
+            )
+            r = cur.fetchone()
+            conn.commit()
+        journal = {'id': r[0], 'date': str(r[1]), 'title': r[2], 'content': r[3],
+                   'verse': r[4], 'reflection': r[5],
+                   'created_at': r[6].isoformat() if r[6] else None,
+                   'updated_at': r[7].isoformat() if r[7] else None}
+        return {'ok': True, 'journal': journal}
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/devotion/journals/{journal_id}')
+def delete_devotion_journal(journal_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM devotion_journals WHERE id=%s AND user_id=%s',
+                        (journal_id, user['id']))
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+# ── 主日讲道笔记 /api/sermon/journals ────────────────────────
+
+class SermonJournalRequest(BaseModel):
+    date: str = Field(min_length=1, max_length=20)
+    title: str = Field(default='', max_length=200)
+    preacher: str = Field(default='', max_length=100)
+    verse: str = Field(default='', max_length=200)
+    content: str = Field(default='')
+    reflection: str = Field(default='')
+
+
+@app.get('/api/sermon/journals')
+def list_sermon_journals(limit: int = 50, offset: int = 0, request: Request = None):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, date, title, preacher, verse, content, reflection, created_at, updated_at '
+                'FROM sermon_journals WHERE user_id=%s ORDER BY date DESC LIMIT %s OFFSET %s',
+                (user['id'], limit, offset)
+            )
+            rows = cur.fetchall()
+            cur.execute('SELECT COUNT(*) FROM sermon_journals WHERE user_id=%s', (user['id'],))
+            total = cur.fetchone()[0]
+        items = [{'id': r[0], 'date': str(r[1]), 'title': r[2], 'preacher': r[3],
+                  'verse': r[4], 'content': r[5], 'reflection': r[6],
+                  'created_at': r[7].isoformat() if r[7] else None,
+                  'updated_at': r[8].isoformat() if r[8] else None} for r in rows]
+        return {'items': items, 'total': total}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/sermon/journals')
+def save_sermon_journal(payload: SermonJournalRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO sermon_journals (user_id, date, title, preacher, verse, content, reflection)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (user_id, date) DO UPDATE
+                   SET title=EXCLUDED.title, preacher=EXCLUDED.preacher,
+                       verse=EXCLUDED.verse, content=EXCLUDED.content,
+                       reflection=EXCLUDED.reflection, updated_at=NOW()
+                   RETURNING id, date, title, preacher, verse, content, reflection, created_at, updated_at''',
+                (user['id'], payload.date, payload.title, payload.preacher,
+                 payload.verse, payload.content, payload.reflection)
+            )
+            r = cur.fetchone()
+            conn.commit()
+        journal = {'id': r[0], 'date': str(r[1]), 'title': r[2], 'preacher': r[3],
+                   'verse': r[4], 'content': r[5], 'reflection': r[6],
+                   'created_at': r[7].isoformat() if r[7] else None,
+                   'updated_at': r[8].isoformat() if r[8] else None}
+        return {'ok': True, 'journal': journal}
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/sermon/journals/{journal_id}')
+def delete_sermon_journal(journal_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM sermon_journals WHERE id=%s AND user_id=%s',
+                        (journal_id, user['id']))
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+# ── 个人日记 /api/personal/notes ─────────────────────────────
+
+class PersonalNoteRequest(BaseModel):
+    id: str = Field(default='')   # 前端本地生成的 uuid
+    date: str = Field(min_length=1, max_length=20)
+    title: str = Field(default='', max_length=200)
+    content: str = Field(default='')
+    mood: str = Field(default='', max_length=50)
+
+
+@app.get('/api/personal/notes')
+def list_personal_notes(request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, date, title, content, mood, created_at, updated_at '
+                'FROM personal_notes WHERE user_id=%s ORDER BY date DESC',
+                (user['id'],)
+            )
+            rows = cur.fetchall()
+        items = [{'id': r[0], 'date': str(r[1]), 'title': r[2], 'content': r[3],
+                  'mood': r[4], 'created_at': r[5].isoformat() if r[5] else None,
+                  'updated_at': r[6].isoformat() if r[6] else None} for r in rows]
+        return {'items': items}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/personal/notes')
+def save_personal_note(payload: PersonalNoteRequest, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO personal_notes (user_id, date, title, content, mood)
+                   VALUES (%s,%s,%s,%s,%s)
+                   ON CONFLICT (user_id, date) DO UPDATE
+                   SET title=EXCLUDED.title, content=EXCLUDED.content,
+                       mood=EXCLUDED.mood, updated_at=NOW()
+                   RETURNING id, date, title, content, mood, created_at, updated_at''',
+                (user['id'], payload.date, payload.title, payload.content, payload.mood)
+            )
+            r = cur.fetchone()
+            conn.commit()
+        note = {'id': r[0], 'date': str(r[1]), 'title': r[2], 'content': r[3],
+                'mood': r[4], 'created_at': r[5].isoformat() if r[5] else None,
+                'updated_at': r[6].isoformat() if r[6] else None}
+        return {'ok': True, 'note': note}
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/personal/notes/{note_id}')
+def delete_personal_note(note_id: int, request: Request):
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM personal_notes WHERE id=%s AND user_id=%s',
+                        (note_id, user['id']))
+            conn.commit()
+        return {'ok': True}
+    finally:
+        _release_db(conn)
+
+
+# ── 签到 / 分享墙 /api/user/checkin ──────────────────────────
+
+class CheckinRequest(BaseModel):
+    emotionLabel: str = Field(default='', max_length=100)
+    emotionKey: str = Field(default='', max_length=200)
+    note: str = Field(default='', max_length=500)
+    isAnonymous: bool = False
+
+
+@app.post('/api/user/checkin')
+def submit_checkin(payload: CheckinRequest, request: Request):
+    user = _optional_user(request)
+    uid = user['id'] if user else None
+    nick = user.get('nickname', '') if user else ''
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO checkins (user_id, nickname, emotion_label, emotion_key, note, is_anonymous) '
+                'VALUES (%s,%s,%s,%s,%s,%s) RETURNING id, created_at',
+                (uid, nick, payload.emotionLabel, payload.emotionKey,
+                 payload.note, payload.isAnonymous)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': row[0], 'tags_extracted': payload.emotionLabel,
+                'created_at': row[1].isoformat()}
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/user/checkins')
+def list_checkins(limit: int = 40, offset: int = 0):
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT c.id, c.nickname, c.emotion_label, c.note, c.is_anonymous,
+                          c.created_at, u.avatar
+                   FROM checkins c LEFT JOIN users u ON u.id = c.user_id
+                   ORDER BY c.created_at DESC LIMIT %s OFFSET %s''',
+                (limit, offset)
+            )
+            rows = cur.fetchall()
+            cur.execute('SELECT COUNT(*) FROM checkins')
+            total = cur.fetchone()[0]
+        items = [{'id': r[0],
+                  'nickname': '匿名' if r[4] else (r[1] or '用户'),
+                  'emotion_label': r[2], 'note': r[3], 'is_anonymous': r[4],
+                  'created_at': r[5].isoformat() if r[5] else None,
+                  'avatar': '' if r[4] else (r[6] or '')} for r in rows]
+        return {'items': items, 'total': total}
+    finally:
+        _release_db(conn)
+
+
+# ── 简单 AI 对话（流式） /api/chat ────────────────────────────
+
+@app.post('/api/chat')
+async def chat_endpoint(request: Request):
+    from fastapi.responses import StreamingResponse
+    body = await request.json()
+    messages = body.get('messages', [])
+    session_id = body.get('session_id', '')
+    if not messages:
+        raise HTTPException(status_code=400, detail='messages required')
+    try:
+        from query_emotion_verses import call_chat
+        last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
+        system_prompt = (
+            '你是情感星球的属灵辅导助手，擅长用圣经原则回应用户的情感困惑与属灵问题。'
+            '回应要温暖、简洁、有深度，适当引用圣经经文。'
+        )
+        reply = await asyncio.to_thread(call_chat, system_prompt, last_user)
+
+        async def _stream():
+            yield f'data: {json.dumps({"delta": reply, "session_id": session_id}, ensure_ascii=False)}\n\n'
+            yield f'data: {json.dumps({"done": True, "session_id": session_id}, ensure_ascii=False)}\n\n'
+
+        return StreamingResponse(_stream(), media_type='text/event-stream')
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
