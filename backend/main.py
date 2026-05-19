@@ -1113,6 +1113,537 @@ async def chat_endpoint(request: Request):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── 心理学引擎 API (L0-L4 架构) ─────────────────────────────────
+
+class PsychologyAnalyzeRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    intensity: int = Field(default=5, ge=1, le=10)
+    include_history: bool = Field(default=True)
+
+
+class ExperimentSubmitRequest(BaseModel):
+    experiment_id: str = Field(min_length=1)
+    outcome: dict = Field(default_factory=dict)
+    reflection: str = Field(default='', max_length=1000)
+
+
+@app.post('/api/psychology/analyze')
+def psychology_analyze(payload: PsychologyAnalyzeRequest, request: Request):
+    """
+    L0-L4 完整心理分析
+    人格因果引擎 + 认知图式 + 状态机 + 身份认同 + 成长轨迹
+    """
+    user = _optional_user(request)
+    user_id = user.get('id') if user else None
+    
+    # 获取历史日志（如果用户已登录且要求包含历史）
+    history = None
+    if user_id and payload.include_history:
+        try:
+            conn = _get_db()
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''SELECT raw_text, emotion_tags, intensity, occurred_at, context_json
+                       FROM emotion_logs 
+                       WHERE user_id = %s 
+                       ORDER BY occurred_at DESC LIMIT 20''',
+                    (user_id,)
+                )
+                rows = cur.fetchall()
+                history = [{
+                    'raw_text': r[0],
+                    'emotion_tags': r[1] or [],
+                    'intensity': r[2] or 5,
+                    'occurred_at': r[3].isoformat() if r[3] else None,
+                    'context_json': r[4] or {}
+                } for r in rows]
+            _release_db(conn)
+        except Exception as e:
+            print(f'[psychology] Failed to load history: {e}', flush=True)
+    
+    # 调用心理学引擎
+    try:
+        from backend.psychology_engine import analyze_emotion
+        result = analyze_emotion(
+            user_input=payload.text,
+            user_id=user_id,
+            history=history,
+            intensity=payload.intensity
+        )
+        
+        # 如果用户已登录，保存本次分析结果
+        if user_id:
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    # 保存情绪日志
+                    cur.execute(
+                        '''INSERT INTO emotion_logs 
+                           (user_id, raw_text, emotion_tags, intensity, occurred_at, context_json)
+                           VALUES (%s, %s, %s, %s, NOW(), %s)
+                           RETURNING id''',
+                        (user_id, payload.text, 
+                         result.get('layers', {}).get('L0_causal', {}).get('personality_driver', {}).get('personality_traits', []),
+                         payload.intensity,
+                         json.dumps({'analysis_id': result.get('analysis_id')})
+                        )
+                    )
+                    log_id = cur.fetchone()[0]
+                    conn.commit()
+                    result['saved_log_id'] = log_id
+                _release_db(conn)
+            except Exception as e:
+                print(f'[psychology] Failed to save log: {e}', flush=True)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[psychology] Analysis failed: {exc}', flush=True)
+        return {
+            'error': '分析服务暂时不可用',
+            'degraded': True,
+            'fallback': {
+                'immediate_action': '深呼吸，尝试4-7-8呼吸法',
+                'core_insight': '当前无法生成深度分析，建议稍后重试或联系支持',
+                'suggested_coping': ['grounding技巧', '与信任的人交谈']
+            }
+        }
+
+
+@app.get('/api/psychology/dashboard')
+def psychology_dashboard(request: Request):
+    """
+    用户心理仪表盘 - 汇总L0-L4各层数据
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    try:
+        conn = _get_db()
+        with conn.cursor() as cur:
+            # 使用仪表盘视图
+            cur.execute(
+                '''SELECT current_state, active_schemas_count, pending_experiments,
+                          weekly_logs, latest_growth_scores, current_identity
+                   FROM user_psychological_dashboard WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'current_state': 'REGULATED',
+                    'active_schemas': 0,
+                    'pending_experiments': 0,
+                    'weekly_logs': 0,
+                    'growth_scores': None,
+                    'current_identity': '正在探索中'
+                }
+            
+            return {
+                'current_state': row[0] or 'REGULATED',
+                'active_schemas': row[1] or 0,
+                'pending_experiments': row[2] or 0,
+                'weekly_logs': row[3] or 0,
+                'growth_scores': row[4],
+                'current_identity': row[5] or '正在探索中'
+            }
+    except Exception as exc:
+        print(f'[psychology_dashboard] Failed: {exc}', flush=True)
+        return {
+            'error': '仪表盘数据暂时不可用',
+            'current_state': 'REGULATED',
+            'active_schemas': 0,
+            'pending_experiments': 0
+        }
+    finally:
+        try:
+            _release_db(conn)
+        except:
+            pass
+
+
+@app.get('/api/psychology/experiments')
+def list_experiments(status: str = 'all', limit: int = 20, request: Request = None):
+    """获取用户的行为实验列表"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            if status == 'all':
+                cur.execute(
+                    '''SELECT id, experiment_id, title, status, scheduled_at, completed_at,
+                              hypothesis_to_test, counter_behavioral_action, binary_telemetry_metric
+                       FROM behavioral_experiments 
+                       WHERE user_id = %s 
+                       ORDER BY created_at DESC LIMIT %s''',
+                    (user_id, limit)
+                )
+            else:
+                cur.execute(
+                    '''SELECT id, experiment_id, title, status, scheduled_at, completed_at,
+                              hypothesis_to_test, counter_behavioral_action, binary_telemetry_metric
+                       FROM behavioral_experiments 
+                       WHERE user_id = %s AND status = %s
+                       ORDER BY scheduled_at ASC LIMIT %s''',
+                    (user_id, status, limit)
+                )
+            rows = cur.fetchall()
+            
+            items = [{
+                'id': r[0],
+                'experiment_id': r[1],
+                'title': r[2],
+                'status': r[3],
+                'scheduled_at': r[4].isoformat() if r[4] else None,
+                'completed_at': r[5].isoformat() if r[5] else None,
+                'hypothesis': r[6],
+                'action': r[7],
+                'metric': r[8]
+            } for r in rows]
+            
+            return {'items': items, 'total': len(items)}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/psychology/experiments/{experiment_id}/complete')
+def complete_experiment(experiment_id: str, payload: ExperimentSubmitRequest, request: Request):
+    """提交行为实验结果"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''UPDATE behavioral_experiments 
+                   SET status = 'completed', 
+                       completed_at = NOW(),
+                       actual_outcome = %s,
+                       user_reflection = %s,
+                       hypothesis_falsified = %s
+                   WHERE user_id = %s AND experiment_id = %s
+                   RETURNING id''',
+                (json.dumps(payload.outcome), payload.reflection,
+                 payload.outcome.get('hypothesis_falsified', False),
+                 user_id, experiment_id)
+            )
+            row = cur.fetchone()
+            conn.commit()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail='实验未找到')
+            
+            return {'ok': True, 'completed_id': row[0]}
+    finally:
+        _release_db(conn)
+
+
+# ── 行为调节系统 API ─────────────────────────────────────────
+
+class BehaviorRegulateRequest(BaseModel):
+    task: str = Field(min_length=1, max_length=500)
+    energy_level: int = Field(default=3, ge=1, le=5)
+    motivation: int = Field(default=5, ge=1, le=10)
+
+
+@app.post('/api/behavior/regulate')
+def behavior_regulate(payload: BehaviorRegulateRequest, request: Request):
+    """
+    行为调节引擎 - 动态行为工程学
+    基于当前能量和动机水平，推荐最小可执行动作
+    """
+    try:
+        from backend.psychology_engine import regulate_behavior
+        result = regulate_behavior(payload.task, payload.energy_level)
+        return result
+    except Exception as exc:
+        print(f'[behavior_regulate] Failed: {exc}', flush=True)
+        # 降级响应
+        tier = "Red" if payload.energy_level <= 2 else ("Yellow" if payload.energy_level <= 3 else "Green")
+        return {
+            "degraded": True,
+            "selected_tier": tier,
+            "min_executable_action": f"尝试{payload.task}的最小版本" if tier == "Red" else f"开始{payload.task}",
+            "emotional_compensation": "系统智能降级，保持连续性",
+            "continuity_advice": "任何微小启动都算成功"
+        }
+
+
+# ── 习惯养成状态机 API ───────────────────────────────────────
+
+class HabitCreateRequest(BaseModel):
+    habit_name: str = Field(min_length=1, max_length=200)
+    anchor: str = Field(default='', max_length=200)
+    energy_level: int = Field(default=3, ge=1, le=5)
+
+
+class HabitExecuteRequest(BaseModel):
+    habit_id: str = Field(min_length=1)
+    energy_level: int = Field(default=3, ge=1, le=5)
+
+
+class HabitLogRequest(BaseModel):
+    habit_id: str = Field(min_length=1)
+    tier_executed: str = Field(default='Yellow')
+    was_completed: bool = Field(default=False)
+    completion_percentage: int = Field(default=0, ge=0, le=100)
+    mood_before: int = Field(default=5, ge=1, le=10)
+    mood_after: int = Field(default=5, ge=1, le=10)
+
+
+@app.post('/api/habits/create')
+def create_habit(payload: HabitCreateRequest, request: Request):
+    """
+    创建习惯状态机 - 三层动态电路保护
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    try:
+        from backend.psychology_engine import create_habit
+        result = create_habit(payload.habit_name, payload.anchor, payload.energy_level)
+        
+        # 保存到数据库
+        conn = _get_db()
+        try:
+            with conn.cursor() as cur:
+                fsm_config = result.get('habit_config', {})
+                cur.execute(
+                    '''INSERT INTO habit_state_machines 
+                       (user_id, habit_name, deterministic_anchor, 
+                        tier_green_config, tier_yellow_config, tier_red_config,
+                        token_green_yield, token_yellow_yield, token_red_yield)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       RETURNING id''',
+                    (user_id, payload.habit_name, fsm_config.get('deterministic_anchor', ''),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('green', {})),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('yellow', {})),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('red', {})),
+                     10, 5, 1)
+                )
+                row = cur.fetchone()
+                conn.commit()
+                result['saved_habit_id'] = str(row[0])
+        finally:
+            _release_db(conn)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[habits_create] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='创建习惯失败')
+
+
+@app.get('/api/habits')
+def list_habits(request: Request):
+    """获取用户的习惯列表"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, habit_name, deterministic_anchor, is_active,
+                          current_streak_days, total_executions, last_execution_at,
+                          tier_green_config, tier_yellow_config, tier_red_config
+                   FROM habit_state_machines 
+                   WHERE user_id = %s AND is_active = TRUE
+                   ORDER BY created_at DESC''',
+                (user_id,)
+            )
+            rows = cur.fetchall()
+            
+            items = [{
+                'id': str(r[0]),
+                'habit_name': r[1],
+                'anchor': r[2],
+                'is_active': r[3],
+                'current_streak': r[4],
+                'total_executions': r[5],
+                'last_execution': r[6].isoformat() if r[6] else None,
+                'tier_configs': {
+                    'green': r[7],
+                    'yellow': r[8],
+                    'red': r[9]
+                }
+            } for r in rows]
+            
+            return {'items': items, 'total': len(items)}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/habits/{habit_id}/execute')
+def execute_habit(habit_id: str, payload: HabitExecuteRequest, request: Request):
+    """
+    执行习惯状态机 - 根据当前能量动态选择层级
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        # 获取习惯配置
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT habit_name, deterministic_anchor,
+                          tier_green_config, tier_yellow_config, tier_red_config
+                   FROM habit_state_machines 
+                   WHERE id = %s AND user_id = %s''',
+                (habit_id, user_id)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail='习惯未找到')
+            
+            habit_config = {
+                'habit_name': row[0],
+                'deterministic_anchor': row[1],
+                'tier_configs': {
+                    'green': row[2],
+                    'yellow': row[3],
+                    'red': row[4]
+                }
+            }
+        
+        # 执行状态机
+        from backend.psychology_engine import habit_fsm
+        execution = habit_fsm.execute_habit(habit_config, payload.energy_level)
+        
+        return execution.to_dict()
+        
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/habits/{habit_id}/log')
+def log_habit_execution(habit_id: str, payload: HabitLogRequest, request: Request):
+    """
+    记录习惯执行结果，更新代币和连胜
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    # 代币计算
+    tier_tokens = {'Green': 10, 'Yellow': 5, 'Red': 1}
+    tokens_earned = tier_tokens.get(payload.tier_executed, 5)
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            # 记录执行日志
+            cur.execute(
+                '''INSERT INTO habit_execution_logs 
+                   (user_id, habit_id, energy_level_at_execution, selected_tier,
+                    tokens_earned, was_completed, completion_percentage,
+                    circuit_breaker_triggered, mood_before, mood_after)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id''',
+                (user_id, habit_id, 3, payload.tier_executed,
+                 tokens_earned, payload.was_completed, payload.completion_percentage,
+                 payload.tier_executed == 'Red',
+                 payload.mood_before, payload.mood_after)
+            )
+            log_id = cur.fetchone()[0]
+            
+            # 更新习惯统计
+            if payload.was_completed:
+                cur.execute(
+                    '''UPDATE habit_state_machines 
+                       SET total_executions = total_executions + 1,
+                           last_execution_at = NOW(),
+                           current_streak_days = CASE 
+                               WHEN last_execution_at >= CURRENT_DATE - INTERVAL '1 day' 
+                               THEN current_streak_days + 1 
+                               ELSE 1 
+                           END
+                       WHERE id = %s''',
+                    (habit_id,)
+                )
+            
+            # 更新代币账本
+            cur.execute(
+                '''INSERT INTO user_token_ledgers (user_id, current_balance, lifetime_earned)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (user_id) 
+                   DO UPDATE SET 
+                       current_balance = user_token_ledgers.current_balance + %s,
+                       lifetime_earned = user_token_ledgers.lifetime_earned + %s,
+                       last_updated = NOW()''',
+                (user_id, tokens_earned, tokens_earned, tokens_earned, tokens_earned)
+            )
+            
+            # 记录代币交易
+            cur.execute(
+                '''INSERT INTO token_transactions 
+                   (user_id, transaction_type, amount, balance_after, habit_id, habit_log_id, description)
+                   VALUES (%s, %s, %s, 
+                       (SELECT current_balance FROM user_token_ledgers WHERE user_id = %s),
+                       %s, %s, %s)''',
+                (user_id, 'earn', tokens_earned, user_id, 
+                 habit_id, log_id, f'{payload.tier_executed} tier execution')
+            )
+            
+            conn.commit()
+            
+            return {
+                'ok': True,
+                'log_id': str(log_id),
+                'tokens_earned': tokens_earned,
+                'circuit_breaker_triggered': payload.tier_executed == 'Red',
+                'anti_guilt_message': '系统已切换至保护模式。连胜保持。核心控制回路完整性100%。' 
+                    if payload.tier_executed == 'Red' else None
+            }
+            
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/habits/dashboard')
+def habits_dashboard(request: Request):
+    """习惯系统仪表盘"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT active_habits, today_executions, max_current_streak,
+                          token_balance, last_habit_name, circuit_breaker_count
+                   FROM user_habit_dashboard 
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'active_habits': 0,
+                    'today_executions': 0,
+                    'current_streak': 0,
+                    'token_balance': 0,
+                    'circuit_breaker_count': 0
+                }
+            
+            return {
+                'active_habits': row[0] or 0,
+                'today_executions': row[1] or 0,
+                'current_streak': row[2] or 0,
+                'token_balance': row[3] or 0,
+                'last_habit_name': row[4],
+                'circuit_breaker_count': row[5] or 0
+            }
+    finally:
+        _release_db(conn)
+
+
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
 
 if FRONTEND_DIST.exists():
