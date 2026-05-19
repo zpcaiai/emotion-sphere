@@ -1881,6 +1881,361 @@ def active_micro_sessions(request: Request):
         _release_db(conn)
 
 
+# ── 子系统四：身份认同重塑 API ────────────────────────────────
+
+class IdentityReinforcementRequest(BaseModel):
+    recent_behaviors: list = Field(default_factory=list)
+    emotion_state: dict = Field(default_factory=dict)
+
+
+class DeconstructLabelRequest(BaseModel):
+    negative_label: str = Field(min_length=1, max_length=200)
+
+
+@app.post('/api/identity/reinforce')
+def identity_reinforce(payload: IdentityReinforcementRequest, request: Request):
+    """
+    身份认同强化 - 生成新自我认知
+    
+    帮助用户形成："我是能够长期成长的人" 而非 "我必须永远完美"
+    """
+    try:
+        from backend.psychology_engine import reinforce_identity
+        
+        user = _optional_user(request)
+        user_id = user['id'] if user else None
+        
+        # 获取用户历史数据
+        emotion_logs = []
+        if user_id:
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    cur.execute(
+                        '''SELECT emotion_summary, intensity, valence 
+                           FROM emotion_logs 
+                           WHERE user_id = %s 
+                           ORDER BY created_at DESC LIMIT 7''',
+                        (user_id,)
+                    )
+                    emotion_logs = [{
+                        'summary': r[0],
+                        'intensity': r[1],
+                        'valence': r[2]
+                    } for r in cur.fetchall()]
+                _release_db(conn)
+            except Exception as e:
+                print(f'[identity] Failed to fetch history: {e}', flush=True)
+        
+        result = reinforce_identity(
+            user_history=emotion_logs,
+            behaviors=payload.recent_behaviors,
+            emotion_state=payload.emotion_state
+        )
+        
+        # 保存到数据库
+        if user_id:
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    cur.execute(
+                        '''INSERT INTO identity_reinforcement_logs 
+                           (user_id, current_narrative, narrative_type, negative_identity_labels,
+                            target_identity, identity_category, reinforcement_language,
+                            reinforcement_strength, user_resonance, migration_direction, migration_progress)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           RETURNING id''',
+                        (user_id, result.get('current_narrative'), result.get('narrative_type'),
+                         json.dumps(result.get('negative_labels', [])),
+                         result.get('target_identity'), result.get('identity_category', 'growth_continuity'),
+                         result.get('reinforcement_language'), 7, 7,
+                         result.get('long_term_migration'), result.get('migration_progress', 50))
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    result['saved_id'] = str(row[0])
+                _release_db(conn)
+            except Exception as e:
+                print(f'[identity] Failed to save: {e}', flush=True)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[identity_reinforce] Failed: {exc}', flush=True)
+        return {
+            'current_narrative': '正在探索中的自我',
+            'target_identity': '我是可以成长的人',
+            'reinforcement_language': '你正在前进，这就是最重要的。',
+            'migration_progress': 30
+        }
+
+
+@app.post('/api/identity/deconstruct')
+def deconstruct_label(payload: DeconstructLabelRequest, request: Request):
+    """
+    解构负面身份标签
+    
+    将"我是懒惰的人"转化为"我只是在特定条件下需要调整节奏"
+    """
+    try:
+        from backend.psychology_engine import identity_engine
+        result = identity_engine.deconstruct_negative_label(payload.negative_label)
+        return result
+    except Exception as exc:
+        print(f'[deconstruct] Failed: {exc}', flush=True)
+        return {
+            'distortion_type': 'overgeneralization',
+            'counter_evidence': ['你曾成功完成过任务', '你在这个平台上寻求帮助'],
+            'reframed_identity': '我是一个在特定条件下会放慢节奏的人'
+        }
+
+
+@app.get('/api/identity/dashboard')
+def identity_dashboard(request: Request):
+    """身份认同仪表盘"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT current_identity_narrative, active_negative_labels,
+                          avg_migration_progress, weekly_reinforcements, identity_clarity_score
+                   FROM user_identity_dashboard 
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'current_narrative': None,
+                    'active_negative_labels': 0,
+                    'migration_progress': 0,
+                    'weekly_reinforcements': 0,
+                    'identity_clarity': 50
+                }
+            
+            return {
+                'current_narrative': row[0],
+                'active_negative_labels': row[1] or 0,
+                'migration_progress': row[2] or 0,
+                'weekly_reinforcements': row[3] or 0,
+                'identity_clarity': row[4] or 50
+            }
+    finally:
+        _release_db(conn)
+
+
+# ── Personality OS 全局系统 API ─────────────────────────────
+
+class PersonalityOSProcessRequest(BaseModel):
+    user_input: str = Field(min_length=1, max_length=2000)
+    telemetry: dict = Field(default_factory=dict)
+    current_state: str = Field(default='NORMAL')
+
+
+class TelemetryReportRequest(BaseModel):
+    subsystem: str = Field(min_length=1)
+    telemetry_data: dict = Field(default_factory=dict)
+
+
+@app.post('/api/os/process')
+def personality_os_process(payload: PersonalityOSProcessRequest, request: Request):
+    """
+    Personality OS 主入口 - 全局协调处理
+    
+    整合所有子系统，根据全局状态返回协调响应
+    """
+    try:
+        from backend.psychology_engine import process_with_personality_os
+        
+        user = _require_user(request)
+        user_id = user['id']
+        
+        result = process_with_personality_os(
+            user_id=user_id,
+            user_input=payload.user_input,
+            telemetry=payload.telemetry,
+            current_state=payload.current_state
+        )
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[personality_os] Failed: {exc}', flush=True)
+        return {
+            'personality_os_version': '1.0-degraded',
+            'system_state': {'current_state': payload.current_state},
+            'cognitive_load': {'total': 5},
+            'global_config': {'task_intensity': 'reduced'},
+            'subsystem_results': {},
+            'error': str(exc)
+        }
+
+
+@app.post('/api/os/telemetry')
+def report_telemetry(payload: TelemetryReportRequest, request: Request):
+    """
+    遥测数据上报 - 触发数据总线信号
+    
+    例如：执行力模块报告点火成功 -> 广播给习惯模块结算代币
+    """
+    try:
+        from backend.psychology_engine import personality_os
+        
+        user = _require_user(request)
+        user_id = user['id']
+        
+        # 处理遥测反馈，生成信号
+        signals = personality_os.data_bus.process_telemetry_feedback(
+            user_id=user_id,
+            subsystem=payload.subsystem,
+            telemetry_data=payload.telemetry_data
+        )
+        
+        return {
+            'ok': True,
+            'signals_generated': len(signals),
+            'signals': signals
+        }
+        
+    except Exception as exc:
+        print(f'[telemetry] Failed: {exc}', flush=True)
+        return {'ok': False, 'error': str(exc)}
+
+
+@app.get('/api/os/dashboard')
+def personality_os_dashboard(request: Request):
+    """
+    Personality OS 全局仪表盘
+    
+    展示：当前状态、认知载荷、各子系统健康度、熔断次数
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT current_state, current_energy, system_energy_level,
+                          cognitive_load, l0_l4_active, behavior_active, execution_active,
+                          identity_active, weekly_circuit_breakers, identity_health,
+                          execution_health, behavior_health
+                   FROM personality_os_dashboard 
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'current_state': 'NORMAL',
+                    'current_energy': 3,
+                    'cognitive_load': 5,
+                    'subsystem_health': {
+                        'psychology': True,
+                        'behavior': True,
+                        'execution': True,
+                        'identity': True
+                    },
+                    'circuit_breakers': 0,
+                    'overall_health': 70
+                }
+            
+            return {
+                'current_state': row[0] or 'NORMAL',
+                'current_energy': row[1] or 3,
+                'system_energy_level': row[2] or 3,
+                'cognitive_load': row[3] or 5,
+                'subsystem_health': {
+                    'psychology': row[4] if row[4] is not None else True,
+                    'behavior': row[5] if row[5] is not None else True,
+                    'execution': row[6] if row[6] is not None else True,
+                    'identity': row[7] if row[7] is not None else True
+                },
+                'circuit_breakers': row[8] or 0,
+                'health_scores': {
+                    'identity': row[9] or 50,
+                    'execution': row[10] or 50,
+                    'behavior': row[11] or 0
+                }
+            }
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/os/set-state')
+def set_system_state(payload: dict, request: Request):
+    """
+    手动设置系统状态（用于测试或特殊场景）
+    
+    广播状态变更信号给所有子系统
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    new_state = payload.get('state', 'NORMAL')
+    
+    try:
+        conn = _get_db()
+        with conn.cursor() as cur:
+            # 获取当前状态
+            cur.execute(
+                'SELECT current_state_code FROM user_system_states WHERE user_id = %s',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            old_state = row[0] if row else 'NORMAL'
+            
+            # 更新状态
+            cur.execute(
+                '''INSERT INTO user_system_states (user_id, current_state_code, previous_state_code, state_entered_at)
+                   VALUES (%s, %s, %s, NOW())
+                   ON CONFLICT (user_id) 
+                   DO UPDATE SET 
+                       previous_state_code = user_system_states.current_state_code,
+                       current_state_code = %s,
+                       state_entered_at = NOW()''',
+                (user_id, new_state, old_state, new_state)
+            )
+            
+            # 记录迁移日志
+            cur.execute(
+                '''INSERT INTO state_transition_logs 
+                   (user_id, from_state_code, to_state_code, transition_trigger, signals_broadcast)
+                   VALUES (%s, %s, %s, %s, %s)''',
+                (user_id, old_state, new_state, 'manual_override', 
+                 json.dumps([{'type': 'manual_state_change', 'by': 'user'}]))
+            )
+            
+            conn.commit()
+        _release_db(conn)
+        
+        # 广播信号
+        from backend.psychology_engine import personality_os
+        personality_os.data_bus.broadcast_event(
+            event_type='command',
+            source='system',
+            target='all',
+            payload={
+                'user_id': user_id,
+                'command': 'STATE_CHANGE',
+                'new_state': new_state,
+                'old_state': old_state,
+                'reason': 'manual_override'
+            },
+            priority=1
+        )
+        
+        return {'ok': True, 'new_state': new_state, 'old_state': old_state}
+        
+    except Exception as exc:
+        print(f'[set_state] Failed: {exc}', flush=True)
+        return {'ok': False, 'error': str(exc)}
+
+
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
 
 if FRONTEND_DIST.exists():

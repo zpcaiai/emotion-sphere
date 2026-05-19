@@ -876,3 +876,115 @@ export async function fetchActiveMicroSessions(token) {
   console.log(`[api] fetchActiveMicroSessions count=${data.items?.length || 0}`)
   return data
 }
+
+// ── 身份认同重塑系统 API ───────────────────────────────────
+
+export async function reinforceIdentity(recentBehaviors, emotionState, token) {
+  console.log(`[api] reinforceIdentity behaviors=${recentBehaviors?.length || 0}`)
+  const response = await fetch(`${API_BASE}/identity/reinforce`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ recent_behaviors: recentBehaviors, emotion_state: emotionState }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] reinforceIdentity narrative=${data.current_narrative?.slice(0, 30)}...`)
+  return data
+}
+
+export async function deconstructLabel(negativeLabel, token) {
+  console.log(`[api] deconstructLabel label=${negativeLabel}`)
+  const response = await fetch(`${API_BASE}/identity/deconstruct`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ negative_label: negativeLabel }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] deconstructLabel distortion=${data.distortion_type}`)
+  return data
+}
+
+export async function fetchIdentityDashboard(token) {
+  console.log(`[api] fetchIdentityDashboard`)
+  const response = await fetch(`${API_BASE}/identity/dashboard`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchIdentityDashboard clarity=${data.identity_clarity}`)
+  return data
+}
+
+// ── Personality OS 全局系统 API ───────────────────────────
+
+export async function processWithPersonalityOS(userInput, telemetry, currentState, token) {
+  console.log(`[api] processWithPersonalityOS state=${currentState}`)
+  const response = await fetch(`${API_BASE}/os/process`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ user_input: userInput, telemetry, current_state: currentState }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] processWithPersonalityOS new_state=${data.system_state?.current_state}`)
+  return data
+}
+
+export async function reportTelemetry(subsystem, telemetryData, token) {
+  console.log(`[api] reportTelemetry subsystem=${subsystem}`)
+  const response = await fetch(`${API_BASE}/os/telemetry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ subsystem, telemetry_data: telemetryData }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] reportTelemetry signals=${data.signals_generated}`)
+  return data
+}
+
+export async function fetchPersonalityOSDashboard(token) {
+  console.log(`[api] fetchPersonalityOSDashboard`)
+  const response = await fetch(`${API_BASE}/os/dashboard`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchPersonalityOSDashboard state=${data.current_state}`)
+  return data
+}
+
+export async function setSystemState(newState, token) {
+  console.log(`[api] setSystemState ${newState}`)
+  const response = await fetch(`${API_BASE}/os/set-state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ state: newState }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] setSystemState ok=${data.ok}`)
+  return data
+}

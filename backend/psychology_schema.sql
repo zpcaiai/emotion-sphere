@@ -842,11 +842,317 @@ SELECT
 FROM users u;
 
 -- ============================================================
+-- 子系统四：身份认同重塑系统 (Identity Reinforcement Engine)
+-- ============================================================
+
+-- 22. 身份认同强化记录 (核心表)
+CREATE TABLE IF NOT EXISTS identity_reinforcement_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 当前身份叙事
+    current_narrative   TEXT,       -- "我是能够长期成长的人"
+    narrative_type      VARCHAR(50), -- redemption/contamination/turning_point/stable
+    
+    -- 负面身份标签（需要解构的）
+    negative_identity_labels TEXT[], -- ["我是懒惰的人", "我总是半途而废"]
+    
+    -- 新身份强化目标
+    target_identity     TEXT,       -- "我是可以恢复的人"
+    identity_category   VARCHAR(50), -- growth_continuity/resilience/stability/long_term/self_mastery
+    
+    -- 强化语言记录
+    reinforcement_language  TEXT,   -- 系统生成的强化语句
+    user_reflection     TEXT,       -- 用户对此的反思
+    
+    -- 强化效果
+    reinforcement_strength  INTEGER CHECK (reinforcement_strength BETWEEN 1 AND 10),
+    user_resonance      INTEGER CHECK (user_resonance BETWEEN 1 AND 10), -- 用户共鸣度
+    
+    -- 长期人格迁移追踪
+    migration_direction     VARCHAR(50), -- toward_positive/stabilizing/recovering
+    migration_progress      INTEGER CHECK (migration_progress BETWEEN 0 AND 100),
+    
+    -- 关联数据
+    related_emotion_log_id  UUID REFERENCES emotion_logs(id) ON DELETE SET NULL,
+    related_habit_id        UUID REFERENCES habit_state_machines(id) ON DELETE SET NULL,
+    related_intervention_id UUID REFERENCES execution_paralysis_logs(id) ON DELETE SET NULL,
+    
+    reinforced_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_identity_logs_user ON identity_reinforcement_logs(user_id);
+CREATE INDEX idx_identity_logs_time ON identity_reinforcement_logs(reinforced_at DESC);
+CREATE INDEX idx_identity_logs_category ON identity_reinforcement_logs(identity_category);
+
+-- 23. 长期人格迁移追踪 (Personality Migration Tracker)
+CREATE TABLE IF NOT EXISTS personality_migrations (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 迁移维度
+    migration_dimension VARCHAR(50), -- continuity/resilience/stability/long_term/self_mastery
+    
+    -- 起点与目标
+    starting_identity   TEXT,       -- "我以前认为自己是..."
+    target_identity     TEXT,       -- "我正在成为..."
+    
+    -- 迁移路径
+    migration_path      JSONB[],    -- [{stage, milestone, achieved_at}]
+    current_stage       INTEGER DEFAULT 0,
+    
+    -- 支撑证据
+    supporting_evidence JSONB[],    -- [{event_type, description, impact_score}]
+    
+    -- 迁移状态
+    migration_status    VARCHAR(20) DEFAULT 'in_progress', -- in_progress/completed/paused
+    progress_percentage INTEGER CHECK (progress_percentage BETWEEN 0 AND 100),
+    
+    started_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estimated_completion TIMESTAMP,
+    achieved_at         TIMESTAMP
+);
+
+CREATE INDEX idx_migration_user ON personality_migrations(user_id);
+CREATE INDEX idx_migration_dimension ON personality_migrations(user_id, migration_dimension);
+
+-- 24. 身份认同仪表盘快照
+CREATE OR REPLACE VIEW user_identity_dashboard AS
+SELECT 
+    u.id as user_id,
+    
+    -- 当前主导身份叙事
+    (SELECT current_narrative FROM identity_reinforcement_logs 
+     WHERE user_id = u.id ORDER BY reinforced_at DESC LIMIT 1) as current_identity_narrative,
+    
+    -- 负面标签数量（需要解构的）
+    (SELECT COUNT(*) FROM (
+        SELECT UNNEST(negative_identity_labels) as label 
+        FROM identity_reinforcement_logs 
+        WHERE user_id = u.id AND reinforced_at >= CURRENT_DATE - INTERVAL '30 days'
+    ) subq) as active_negative_labels,
+    
+    -- 长期人格迁移进度（平均）
+    (SELECT COALESCE(AVG(progress_percentage), 0)::INTEGER 
+     FROM personality_migrations 
+     WHERE user_id = u.id AND migration_status = 'in_progress') as avg_migration_progress,
+    
+    -- 最近强化记录数
+    (SELECT COUNT(*) FROM identity_reinforcement_logs 
+     WHERE user_id = u.id AND reinforced_at >= CURRENT_DATE - INTERVAL '7 days') as weekly_reinforcements,
+    
+    -- 身份认同清晰度分数
+    (SELECT COALESCE(AVG(reinforcement_strength * user_resonance / 10.0), 50)::INTEGER 
+     FROM identity_reinforcement_logs 
+     WHERE user_id = u.id AND reinforced_at >= CURRENT_DATE - INTERVAL '30 days') as identity_clarity_score
+
+FROM users u;
+
+-- ============================================================
+-- 全局状态机与数据总线架构 (System Integration Layer)
+-- ============================================================
+
+-- 25. 全局系统状态定义 (Personality OS State Machine)
+CREATE TABLE IF NOT EXISTS system_state_definitions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    state_name      VARCHAR(50) UNIQUE NOT NULL, -- NORMAL/LOW_ENERGY/ANXIETY_ESCAPE/SHAME_COLLAPSE/RECOVERY/FLOW
+    state_code      VARCHAR(20) UNIQUE NOT NULL, -- 状态代码
+    
+    -- 状态特征
+    arousal_range       JSONB,  -- {min, max}
+    valence_range       JSONB,  -- {min, max}
+    energy_level_range  JSONB,  -- {min, max}
+    
+    -- 触发条件
+    trigger_conditions  JSONB[], -- [{condition_type, threshold, description}]
+    
+    -- 行为策略
+    behavior_strategy   TEXT,    -- 该状态下的行为策略描述
+    task_intensity      VARCHAR(20), -- full/reduced/minimal/paused
+    social_interaction  VARCHAR(20), -- encouraged/neutral/minimized
+    
+    -- Prompt特征
+    prompt_tone         VARCHAR(20), -- supportive/neutral/firm/gentle
+    prompt_focus        TEXT[],  -- 该状态下Prompt应关注的重点
+    
+    is_active           BOOLEAN DEFAULT TRUE
+);
+
+-- 初始化标准状态
+INSERT INTO system_state_definitions (state_name, state_code, arousal_range, valence_range, energy_level_range, trigger_conditions, behavior_strategy, task_intensity, social_interaction, prompt_tone, prompt_focus) VALUES
+('STATE_NORMAL', 'NORMAL', '{"min": 3, "max": 6}', '{"min": 0, "max": 7}', '{"min": 3, "max": 5}', '[{"condition": "energy >= 3", "threshold": 3}]', '标准执行模式', 'full', 'encouraged', 'supportive', ARRAY['常规任务', '习惯维护', '成长追踪']),
+('STATE_LOW_ENERGY', 'LOW_ENERGY', '{"min": 2, "max": 4}', '{"min": -3, "max": 3}', '{"min": 1, "max": 2}', '[{"condition": "energy <= 2", "threshold": 2}]', '低功耗模式 - 熔断保护', 'minimal', 'neutral', 'gentle', ARRAY['最小动作', '连续性保持', '休息许可']),
+('STATE_ANXIETY_ESCAPE', 'ANXIETY_ESCAPE', '{"min": 6, "max": 9}', '{"min": -7, "max": -2}', '{"min": 1, "max": 3}', '[{"condition": "anxiety_peak", "threshold": 7}]', '焦虑应对模式 - grounding优先', 'reduced', 'minimized', 'gentle', ARRAY[' grounding', '呼吸调节', '小步启动']),
+('STATE_SHAME_COLLAPSE', 'SHAME_COLLAPSE', '{"min": 4, "max": 8}', '{"min": -9, "max": -5}', '{"min": 1, "max": 2}', '[{"condition": "self_negation", "threshold": 8}]', '羞耻恢复模式 - 重建安全基地', 'paused', 'minimized', 'gentle', ARRAY['身份强化', '负面标签解构', '自我慈悲']),
+('STATE_RECOVERY', 'RECOVERY', '{"min": 3, "max": 6}', '{"min": -2, "max": 4}', '{"min": 2, "max": 4}', '[{"condition": "post_crisis", "threshold": 5}]', '恢复期 - 渐进式重启', 'reduced', 'neutral', 'supportive', ARRAY['渐进任务', '成功经验', '动量积累']),
+('STATE_FLOW', 'FLOW', '{"min": 5, "max": 8}', '{"min": 5, "max": 10}', '{"min": 4, "max": 5}', '[{"condition": "momentum > 80", "threshold": 80}]', '心流模式 - 最大化产出', 'full', 'neutral', 'neutral', ARRAY['深度工作', '保持节奏', '避免打断'])
+ON CONFLICT (state_name) DO NOTHING;
+
+-- 26. 用户当前系统状态 (Personality OS Runtime State)
+CREATE TABLE IF NOT EXISTS user_system_states (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+    
+    -- 当前状态
+    current_state_code      VARCHAR(20) DEFAULT 'NORMAL',
+    previous_state_code     VARCHAR(20),
+    
+    -- 状态迁移信息
+    state_entered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    state_duration_seconds  INTEGER DEFAULT 0,
+    state_transition_reason TEXT,    -- 为什么进入这个状态
+    
+    -- 实时指标
+    current_arousal         INTEGER CHECK (current_arousal BETWEEN 1 AND 10),
+    current_valence         INTEGER CHECK (current_valence BETWEEN -10 AND 10),
+    current_energy_level    INTEGER CHECK (current_energy_level BETWEEN 1 AND 5),
+    
+    -- 自动调节配置
+    auto_regulation_enabled BOOLEAN DEFAULT TRUE,
+    system_energy_override  INTEGER, -- 手动覆盖能耗等级
+    
+    -- 全局联动状态
+    psychology_layer_active BOOLEAN DEFAULT TRUE,  -- L0-L4引擎
+    behavior_layer_active   BOOLEAN DEFAULT TRUE,  -- 行为调节
+    execution_layer_active  BOOLEAN DEFAULT TRUE,  -- 执行力引导
+    identity_layer_active   BOOLEAN DEFAULT TRUE,  -- 身份认同
+    
+    last_updated            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_user_states_current ON user_system_states(user_id, current_state_code);
+
+-- 27. 状态迁移历史日志 (State Transition Log)
+CREATE TABLE IF NOT EXISTS state_transition_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    from_state_code     VARCHAR(20),
+    to_state_code       VARCHAR(20),
+    transition_trigger  TEXT,       -- 触发迁移的事件
+    
+    -- 迁移时的系统指标
+    arousal_at_transition   INTEGER,
+    valence_at_transition   INTEGER,
+    energy_at_transition    INTEGER,
+    
+    -- 自动干预记录
+    auto_interventions  JSONB[],    -- [{subsystem, action, result}]
+    
+    -- 数据总线信号
+    signals_broadcast   JSONB[],    -- 广播给其他子系统的信号
+    
+    transitioned_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_state_transitions_user ON state_transition_logs(user_id);
+CREATE INDEX idx_state_transitions_time ON state_transition_logs(transitioned_at DESC);
+
+-- 28. 全局数据总线事件 (Data Bus Events)
+CREATE TABLE IF NOT EXISTS data_bus_events (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    event_type      VARCHAR(50),  -- telemetry/signal/broadcast/command
+    event_source    VARCHAR(50),  -- psychology/behavior/execution/identity/system
+    event_target    VARCHAR(50),  -- 目标子系统或 'all'
+    
+    -- 事件内容
+    event_payload   JSONB,
+    
+    -- 优先级与时效
+    priority        INTEGER DEFAULT 5, -- 1-10, 1最高
+    ttl_seconds     INTEGER DEFAULT 300, -- 默认5分钟过期
+    
+    -- 处理状态
+    is_processed    BOOLEAN DEFAULT FALSE,
+    processed_at    TIMESTAMP,
+    processed_by    VARCHAR(50), -- 处理该事件的子系统
+    
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_bus_events_unprocessed ON data_bus_events(is_processed, priority DESC, created_at);
+CREATE INDEX idx_bus_events_target ON data_bus_events(event_target, is_processed);
+
+-- 29. 动态负载均衡器配置 (Dynamic Load Balancer)
+CREATE TABLE IF NOT EXISTS dynamic_load_configs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 当前认知载荷估算
+    cognitive_load_score      INTEGER CHECK (cognitive_load_score BETWEEN 1 AND 10),
+    emotional_load_score      INTEGER CHECK (emotional_load_score BETWEEN 1 AND 10),
+    behavioral_load_score     INTEGER CHECK (behavioral_load_score BETWEEN 1 AND 10),
+    
+    -- 自动调节配置
+    auto_override_enabled     BOOLEAN DEFAULT TRUE,
+    red_tier_threshold        INTEGER DEFAULT 2, -- 能量低于此值强制熔断
+    
+    -- 当前全局设置
+    current_system_energy_level INTEGER DEFAULT 3,
+    current_task_intensity      VARCHAR(20) DEFAULT 'full',
+    current_prompt_tone         VARCHAR(20) DEFAULT 'supportive',
+    
+    -- 熔断记录
+    last_circuit_breaker_at     TIMESTAMP,
+    circuit_breaker_count_7d    INTEGER DEFAULT 0,
+    
+    updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_load_config_user ON dynamic_load_configs(user_id);
+
+-- ============================================================
+-- Personality OS 整合仪表盘
+-- ============================================================
+
+CREATE OR REPLACE VIEW personality_os_dashboard AS
+SELECT 
+    u.id as user_id,
+    
+    -- 当前系统状态
+    (SELECT current_state_code FROM user_system_states WHERE user_id = u.id) as current_state,
+    (SELECT current_energy_level FROM user_system_states WHERE user_id = u.id) as current_energy,
+    
+    -- 负载均衡器状态
+    (SELECT current_system_energy_level FROM dynamic_load_configs WHERE user_id = u.id) as system_energy_level,
+    (SELECT cognitive_load_score FROM dynamic_load_configs WHERE user_id = u.id) as cognitive_load,
+    
+    -- 各子系统活跃度
+    (SELECT psychology_layer_active FROM user_system_states WHERE user_id = u.id) as l0_l4_active,
+    (SELECT behavior_layer_active FROM user_system_states WHERE user_id = u.id) as behavior_active,
+    (SELECT execution_layer_active FROM user_system_states WHERE user_id = u.id) as execution_active,
+    (SELECT identity_layer_active FROM user_system_states WHERE user_id = u.id) as identity_active,
+    
+    -- 今日事件统计
+    (SELECT COUNT(*) FROM data_bus_events 
+     WHERE event_payload->>'user_id' = u.id::text 
+     AND created_at >= CURRENT_DATE) as today_bus_events,
+    
+    -- 熔断次数
+    (SELECT circuit_breaker_count_7d FROM dynamic_load_configs WHERE user_id = u.id) as weekly_circuit_breakers,
+    
+    -- 综合健康度
+    (SELECT COALESCE(
+        (SELECT identity_clarity_score FROM user_identity_dashboard WHERE user_id = u.id), 50
+    )) as identity_health,
+    (SELECT COALESCE(
+        (SELECT current_momentum FROM user_execution_dashboard WHERE user_id = u.id), 50
+    )) as execution_health,
+    (SELECT COALESCE(
+        (SELECT token_balance FROM user_habit_dashboard WHERE user_id = u.id), 0
+    )) as behavior_health
+
+FROM users u;
+
+-- ============================================================
 -- 初始化说明
 -- ============================================================
 -- 执行顺序：
 -- 1. 先执行 db_init.sql（基础用户表）
 -- 2. 再执行本文件（心理系统完整schema）
+-- 3. 所有视图和整合层将自动创建
 -- 
 -- 使用方式：
 -- psql $DATABASE_URL -f backend/psychology_schema.sql

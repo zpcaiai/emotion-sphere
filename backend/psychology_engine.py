@@ -1456,6 +1456,749 @@ def calculate_micro_momentum(completed: int, total: int, avg_time: float) -> dic
     }
 
 
+# ============================================================
+# 子系统四：身份认同重塑系统 (Identity Reinforcement Engine)
+# ============================================================
+
+@dataclass
+class IdentityReinforcementResult:
+    """身份认同强化结果"""
+    current_narrative: str = ""
+    narrative_type: str = ""
+    negative_labels: list = field(default_factory=list)
+    target_identity: str = ""
+    reinforcement_language: str = ""
+    long_term_migration: str = ""
+    migration_progress: int = 0
+    
+    def to_dict(self) -> dict:
+        return {
+            "current_narrative": self.current_narrative,
+            "narrative_type": self.narrative_type,
+            "negative_labels": self.negative_labels,
+            "target_identity": self.target_identity,
+            "reinforcement_language": self.reinforcement_language,
+            "long_term_migration": self.long_term_migration,
+            "migration_progress": self.migration_progress
+        }
+
+
+class IdentityReinforcementEngine:
+    """
+    身份认同重塑系统
+    
+    目标不是单次鼓励，而是长期帮助用户形成新的自我认知：
+    - "我是能够长期成长的人"
+    - "我是可以恢复的人"  
+    - "我是有稳定性的"
+    - "我正在成为更好的自己"
+    
+    绝不能强化：
+    - 完美主义
+    - 一次失败等于彻底失败
+    - 自我羞辱
+    - 极端自律崇拜
+    """
+    
+    SYSTEM_PROMPT_IDENTITY = """你是"身份认同重塑系统（Identity Reinforcement Engine）"。
+
+你的目标：不是单次鼓励，而是长期帮助用户形成新的自我认知。
+
+必须长期强化：
+- 用户的成长连续性
+- 用户的恢复能力  
+- 用户的稳定感
+- 用户的长期主义
+- 用户的自我掌控感
+
+绝不能强化：
+- 完美主义
+- 一次失败等于彻底失败
+- 自我羞辱
+- 极端自律崇拜
+
+帮助用户逐渐形成：
+- "我是能够长期成长的人"
+- "我是可以恢复的人"
+- "我是有稳定性的"
+- "我正在成为更好的自己"
+
+而不是：
+- "我必须永远完美执行"
+
+分析用户的近期行为和情绪记录，输出身份认同强化方案。
+
+输出严格JSON格式：
+{
+  "current_narrative": "用户当前的身份叙事",
+  "narrative_type": "redemption/contamination/turning_point/stable",
+  "negative_identity_labels": ["需要解构的负面标签1", "标签2"],
+  "target_identity": "建议强化的新身份认知",
+  "identity_category": "growth_continuity/resilience/stability/long_term/self_mastery",
+  "reinforcement_language": "具体的强化语句，温暖而坚定",
+  "long_term_migration": "长期人格迁移方向描述",
+  "migration_progress": 0-100
+}"""
+
+    POSITIVE_IDENTITIES = {
+        "growth_continuity": [
+            "我是能够长期成长的人",
+            "我每天都在进步，哪怕只是一点点",
+            "成长是我的节奏，不是冲刺"
+        ],
+        "resilience": [
+            "我是可以恢复的人",
+            "我有能力从低谷中走出来",
+            "挫折不会定义我，我的恢复会"
+        ],
+        "stability": [
+            "我是有稳定性的",
+            "我可以在波动中保持核心稳定",
+            "我的价值不取决于今天的表现"
+        ],
+        "long_term": [
+            "我是长期主义者",
+            "我愿意为未来的自己投资",
+            "时间是我的朋友"
+        ],
+        "self_mastery": [
+            "我正在掌握自己的生活",
+            "我有能力做出适合自己的选择",
+            "我是自己人生的作者"
+        ]
+    }
+
+    def reinforce_identity(
+        self,
+        user_history: list,
+        recent_behaviors: list,
+        current_emotion_state: dict
+    ) -> IdentityReinforcementResult:
+        """
+        分析用户数据并生成身份认同强化方案
+        
+        Args:
+            user_history: 用户历史记录
+            recent_behaviors: 最近行为记录
+            current_emotion_state: 当前情绪状态
+        """
+        # 构建分析上下文
+        context = f"近期行为:\n"
+        for b in recent_behaviors[-7:]:  # 最近7条
+            context += f"- {b}\n"
+        
+        context += f"\n当前情绪状态: {json.dumps(current_emotion_state, ensure_ascii=False)}\n"
+        
+        try:
+            if call_chat:
+                raw = call_chat(self.SYSTEM_PROMPT_IDENTITY, context, temperature=0.5)
+            else:
+                raw = self._mock_identity_reinforcement()
+            
+            data = self._parse_json(raw)
+            
+            # 选择强化语言（如果LLM生成的不够好）
+            category = data.get("identity_category", "growth_continuity")
+            reinforcement = data.get("reinforcement_language", "")
+            if not reinforcement or len(reinforcement) < 10:
+                reinforcement = self._select_reinforcement_language(category)
+            
+            return IdentityReinforcementResult(
+                current_narrative=data.get("current_narrative", ""),
+                narrative_type=data.get("narrative_type", "stable"),
+                negative_labels=data.get("negative_identity_labels", []),
+                target_identity=data.get("target_identity", ""),
+                reinforcement_language=reinforcement,
+                long_term_migration=data.get("long_term_migration", ""),
+                migration_progress=data.get("migration_progress", 50)
+            )
+            
+        except Exception as e:
+            print(f"[IdentityReinforcement] Failed: {e}", flush=True)
+            return self._fallback_reinforcement()
+    
+    def deconstruct_negative_label(self, negative_label: str) -> dict:
+        """
+        解构负面身份标签
+        
+        Args:
+            negative_label: 如 "我是懒惰的人"
+            
+        Returns:
+            解构方案
+        """
+        prompt = f"解构这个负面身份标签: '{negative_label}'。找出其中的认知扭曲，并提供反证据。输出JSON: {{'distortion_type': '类型', 'counter_evidence': ['证据1', '证据2'], 'reframed_identity': '重构后的身份'}}"
+        
+        try:
+            if call_chat:
+                raw = call_chat("你是认知重构专家", prompt, temperature=0.4)
+                return self._parse_json(raw)
+            else:
+                return self._mock_deconstruction(negative_label)
+        except Exception as e:
+            print(f"[Deconstruct] Failed: {e}", flush=True)
+            return {
+                "distortion_type": "overgeneralization",
+                "counter_evidence": ["你曾成功完成过任务", "你的努力有记录"],
+                "reframed_identity": "我是一个在特定条件下会放慢节奏的人"
+            }
+    
+    def _select_reinforcement_language(self, category: str) -> str:
+        """选择强化语言"""
+        import random
+        options = self.POSITIVE_IDENTITIES.get(category, self.POSITIVE_IDENTITIES["growth_continuity"])
+        return random.choice(options)
+    
+    def _fallback_reinforcement(self) -> IdentityReinforcementResult:
+        """降级强化"""
+        return IdentityReinforcementResult(
+            current_narrative="正在探索中的自我",
+            narrative_type="stable",
+            negative_labels=[],
+            target_identity="我是可以成长的人",
+            reinforcement_language="你正在前进，这就是最重要的。",
+            long_term_migration="从自我批评转向自我支持",
+            migration_progress=30
+        )
+    
+    def _mock_identity_reinforcement(self) -> str:
+        """模拟身份强化"""
+        return json.dumps({
+            "current_narrative": "我是一个经常拖延、无法坚持的人",
+            "narrative_type": "contamination",
+            "negative_identity_labels": ["我是懒惰的人", "我总是半途而废"],
+            "target_identity": "我是能够长期成长的人",
+            "identity_category": "growth_continuity",
+            "reinforcement_language": "你今天打开了这个应用，这本身就是成长连续性的一部分。每一个微小的选择都在塑造'能够长期成长的你'。",
+            "long_term_migration": "从'我总是失败'到'我在持续成长'",
+            "migration_progress": 35
+        })
+    
+    def _mock_deconstruction(self, label: str) -> dict:
+        """模拟解构"""
+        return {
+            "distortion_type": "all_or_nothing",
+            "counter_evidence": [
+                "你完成了今天的情绪记录",
+                "你曾坚持过一个习惯超过一周",
+                "你在这个平台上寻求帮助"
+            ],
+            "reframed_identity": f"我不是{label}，我只是在某些时刻需要调整节奏"
+        }
+    
+    def _parse_json(self, raw: str) -> dict:
+        try:
+            return json.loads(raw.strip())
+        except:
+            for p in [r'```json\s*(.*?)\s*```', r'```\s*(.*?)\s*```', r'\{.*\}']:
+                for m in re.findall(p, raw, re.DOTALL):
+                    try:
+                        return json.loads(m.strip())
+                    except:
+                        continue
+        return {}
+
+
+# ============================================================
+# 全局状态机与数据总线 (Personality OS Core)
+# ============================================================
+
+class PersonalityOSStateMachine:
+    """
+    Personality OS 核心状态机
+    
+    管理用户全局状态：
+    - STATE_NORMAL: 标准执行
+    - STATE_LOW_ENERGY: 低功耗/熔断
+    - STATE_ANXIETY_ESCAPE: 焦虑逃避
+    - STATE_SHAME_COLLAPSE: 羞耻崩塌
+    - STATE_RECOVERY: 恢复期
+    - STATE_FLOW: 心流状态
+    
+    不同状态 = 不同Prompt + 不同语气 + 不同行为策略 + 不同任务强度
+    """
+    
+    STATES = {
+        "NORMAL": {
+            "prompt_tone": "supportive",
+            "task_intensity": "full",
+            "focus": ["常规任务", "习惯维护", "成长追踪"]
+        },
+        "LOW_ENERGY": {
+            "prompt_tone": "gentle",
+            "task_intensity": "minimal",
+            "focus": ["最小动作", "连续性保持", "休息许可"]
+        },
+        "ANXIETY_ESCAPE": {
+            "prompt_tone": "gentle",
+            "task_intensity": "reduced",
+            "focus": ["grounding", "呼吸调节", "小步启动"]
+        },
+        "SHAME_COLLAPSE": {
+            "prompt_tone": "gentle",
+            "task_intensity": "paused",
+            "focus": ["身份强化", "负面标签解构", "自我慈悲"]
+        },
+        "RECOVERY": {
+            "prompt_tone": "supportive",
+            "task_intensity": "reduced",
+            "focus": ["渐进任务", "成功经验", "动量积累"]
+        },
+        "FLOW": {
+            "prompt_tone": "neutral",
+            "task_intensity": "full",
+            "focus": ["深度工作", "保持节奏", "避免打断"]
+        }
+    }
+    
+    def detect_state_transition(
+        self,
+        current_state: str,
+        telemetry: dict,
+        psychology_result: dict = None
+    ) -> tuple:
+        """
+        检测是否需要状态迁移
+        
+        Returns:
+            (new_state, transition_reason, should_broadcast)
+        """
+        arousal = telemetry.get("arousal", 5)
+        valence = telemetry.get("valence", 0)
+        energy = telemetry.get("energy_level", 3)
+        
+        # 检测崩溃信号
+        collapse_signals = telemetry.get("collapse_signals", [])
+        
+        # 羞耻崩塌检测 (高唤醒 + 负效价 + 自我否定)
+        if any(s in collapse_signals for s in ["self_negation", "shame_peak"]):
+            if valence < -5 and arousal > 5:
+                return "SHAME_COLLAPSE", "检测到羞耻崩塌信号", True
+        
+        # 焦虑逃避检测 (高唤醒 + 负效价)
+        if any(s in collapse_signals for s in ["anxiety_peak", "avoidance"]):
+            if valence < -3 and arousal > 6:
+                return "ANXIETY_ESCAPE", "检测到焦虑逃避模式", True
+        
+        # 低能量检测
+        if energy <= 2:
+            return "LOW_ENERGY", "能量水平低于阈值", True
+        
+        # 心流检测 (高唤醒 + 正效价 + 高动量)
+        momentum = telemetry.get("momentum_score", 50)
+        if arousal >= 5 and valence > 5 and momentum > 80:
+            return "FLOW", "检测到心流状态", False
+        
+        # 恢复检测 (从负面状态回到正常)
+        if current_state in ["SHAME_COLLAPSE", "ANXIETY_ESCAPE", "LOW_ENERGY"]:
+            if valence > -2 and arousal < 6 and energy >= 3:
+                return "RECOVERY", "检测到恢复迹象", True
+        
+        # 从恢复回到正常
+        if current_state == "RECOVERY" and valence > 2 and energy >= 4:
+            return "NORMAL", "恢复完成，进入正常状态", False
+        
+        return current_state, None, False
+    
+    def get_state_config(self, state_code: str) -> dict:
+        """获取状态配置"""
+        return self.STATES.get(state_code, self.STATES["NORMAL"])
+    
+    def generate_state_aware_prompt(
+        self,
+        base_prompt: str,
+        state_code: str,
+        user_context: dict
+    ) -> str:
+        """
+        根据当前状态生成状态感知的Prompt
+        """
+        config = self.get_state_config(state_code)
+        tone = config["prompt_tone"]
+        intensity = config["task_intensity"]
+        
+        tone_modifiers = {
+            "gentle": "用温和、支持性的语气。避免任何施压感。强调'足够好'而不是'完美'。",
+            "supportive": "用鼓励性的语气，认可用户的努力。提供具体的支持建议。",
+            "neutral": "保持专业、简洁的语气。不过度情感化，也不过度干预。",
+            "firm": "用坚定但尊重的语气。清晰表达期望，同时保持尊重。"
+        }
+        
+        intensity_modifiers = {
+            "full": "可以建议完整的任务执行。",
+            "reduced": "建议简化版任务，降低认知负荷。",
+            "minimal": "只建议最小可执行动作，保持连续性优先。",
+            "paused": "建议暂停任务，优先恢复心理状态。"
+        }
+        
+        modifier = tone_modifiers.get(tone, "")
+        intensity_note = intensity_modifiers.get(intensity, "")
+        
+        return f"""{base_prompt}
+
+【系统状态适配】
+当前用户状态: {state_code}
+语气要求: {modifier}
+任务强度: {intensity_note}
+
+请根据以上要求调整你的回应。
+"""
+
+
+class DataBusSystem:
+    """
+    全局数据总线系统
+    
+    实现子系统间的数据流动：
+    - Telemetry Loop: 遥测数据反哺链
+    - Signal Broadcast: 信号广播
+    - State Override: 状态覆盖指令
+    """
+    
+    def broadcast_event(
+        self,
+        event_type: str,
+        source: str,
+        target: str,
+        payload: dict,
+        priority: int = 5
+    ) -> dict:
+        """
+        广播事件到数据总线
+        
+        Args:
+            event_type: telemetry/signal/broadcast/command
+            source: 事件来源子系统
+            target: 目标子系统或 'all'
+            payload: 事件内容
+            priority: 1-10，1最高
+        """
+        event = {
+            "event_id": str(uuid.uuid4()),
+            "event_type": event_type,
+            "source": source,
+            "target": target,
+            "payload": payload,
+            "priority": priority,
+            "timestamp": datetime.now().isoformat(),
+            "status": "broadcasted"
+        }
+        
+        print(f"[DataBus] Event broadcast: {source} -> {target} | Type: {event_type} | Priority: {priority}", flush=True)
+        return event
+    
+    def process_telemetry_feedback(
+        self,
+        user_id: int,
+        subsystem: str,
+        telemetry_data: dict
+    ) -> list:
+        """
+        处理遥测反馈，生成对其他子系统的信号
+        
+        例如：执行力模块成功执行了2分钟点火 -> 广播给习惯模块结算代币
+        """
+        signals = []
+        
+        # 执行力成功信号 -> 行为调节系统
+        if subsystem == "execution" and telemetry_data.get("ignition_completed"):
+            signals.append(self.broadcast_event(
+                event_type="signal",
+                source="execution",
+                target="behavior",
+                payload={
+                    "user_id": user_id,
+                    "signal_name": "habit_execution_success",
+                    "tokens_to_award": telemetry_data.get("tier", "Yellow"),
+                    "context": telemetry_data
+                },
+                priority=3
+            ))
+        
+        # 认知载荷过高信号 -> 全局状态机
+        if subsystem == "psychology" and telemetry_data.get("cognitive_load", 0) > 7:
+            signals.append(self.broadcast_event(
+                event_type="command",
+                source="psychology",
+                target="system",
+                payload={
+                    "user_id": user_id,
+                    "command": "SET_CURRENT_SYSTEM_ENERGY_LEVEL",
+                    "value": 1,
+                    "reason": "Cognitive overload detected"
+                },
+                priority=1  # 最高优先级
+            ))
+        
+        # 身份强化信号 -> 长期记忆系统
+        if subsystem == "identity" and telemetry_data.get("reinforcement_strength", 0) > 7:
+            signals.append(self.broadcast_event(
+                event_type="telemetry",
+                source="identity",
+                target="memory",
+                payload={
+                    "user_id": user_id,
+                    "event": "strong_identity_reinforcement",
+                    "narrative": telemetry_data.get("current_narrative"),
+                    "save_to_long_term": True
+                },
+                priority=4
+            ))
+        
+        return signals
+
+
+class DynamicLoadBalancer:
+    """
+    动态负载均衡器
+    
+    根据用户的认知载荷自动调节全局系统运行模式：
+    - 检测到认知过载 -> 强制进入 Red Tier (熔断)
+    - 协调各子系统的激活/休眠
+    """
+    
+    def calculate_cognitive_load(
+        self,
+        emotion_logs: list,
+        recent_behaviors: list,
+        current_state: str
+    ) -> dict:
+        """
+        计算当前认知载荷
+        
+        Returns:
+            {cognitive, emotional, behavioral, total}
+        """
+        # 基于情绪日志计算情绪载荷
+        emotional_load = 5  # 默认中等
+        if emotion_logs:
+            intensities = [log.get("intensity", 5) for log in emotion_logs[-7:]]
+            emotional_load = min(10, int(sum(intensities) / len(intensities)))
+        
+        # 基于行为记录计算行为载荷
+        behavioral_load = 5
+        if recent_behaviors:
+            # 失败次数多 = 载荷高
+            failures = sum(1 for b in recent_behaviors if not b.get("success", True))
+            behavioral_load = min(10, 3 + failures)
+        
+        # 认知载荷（综合）
+        cognitive_load = min(10, int((emotional_load * 0.5 + behavioral_load * 0.3 + 
+                                    (5 if current_state == "ANXIETY_ESCAPE" else 3) * 0.2)))
+        
+        return {
+            "cognitive": cognitive_load,
+            "emotional": emotional_load,
+            "behavioral": behavioral_load,
+            "total": cognitive_load
+        }
+    
+    def should_trigger_circuit_breaker(
+        self,
+        load_scores: dict,
+        current_energy: int,
+        threshold: int = 2
+    ) -> tuple:
+        """
+        判断是否触发熔断
+        
+        Returns:
+            (should_trigger, reason, recommended_state)
+        """
+        if current_energy <= threshold:
+            return True, f"能量水平{current_energy}低于熔断阈值{threshold}", "LOW_ENERGY"
+        
+        if load_scores["cognitive"] >= 8:
+            return True, "认知载荷过高，强制熔断保护", "LOW_ENERGY"
+        
+        if load_scores["emotional"] >= 9:
+            return True, "情绪载荷临界，启动保护模式", "SHAME_COLLAPSE"
+        
+        return False, None, None
+    
+    def generate_global_config(
+        self,
+        current_state: str,
+        load_scores: dict,
+        user_preferences: dict = None
+    ) -> dict:
+        """
+        生成全局运行配置
+        """
+        state_machine = PersonalityOSStateMachine()
+        state_config = state_machine.get_state_config(current_state)
+        
+        return {
+            "current_state": current_state,
+            "system_energy_level": load_scores.get("total", 3),
+            "task_intensity": state_config["task_intensity"],
+            "prompt_tone": state_config["prompt_tone"],
+            "focus_areas": state_config["focus"],
+            "auto_override_enabled": True,
+            "circuit_breaker_threshold": 2,
+            "subsystem_status": {
+                "psychology": current_state != "SHAME_COLLAPSE",
+                "behavior": current_state not in ["SHAME_COLLAPSE", "LOW_ENERGY"],
+                "execution": current_state not in ["SHAME_COLLAPSE"],
+                "identity": True  # 身份层始终激活
+            }
+        }
+
+
+# ============================================================
+# Personality OS 协调器 (终极整合)
+# ============================================================
+
+class PersonalityOS:
+    """
+    Personality OS - AI人生行为操作系统
+    
+    整合四大子系统：
+    - L0-L4 心理学引擎 (人格因果)
+    - 行为调节系统 (动态行为工程)
+    - 执行力边缘引导 (实时干预)
+    - 身份认同重塑 (长期人格迁移)
+    
+    通过全局状态机和数据总线实现协同。
+    """
+    
+    def __init__(self):
+        self.state_machine = PersonalityOSStateMachine()
+        self.data_bus = DataBusSystem()
+        self.load_balancer = DynamicLoadBalancer()
+        self.identity_engine = IdentityReinforcementEngine()
+    
+    def process_user_input(
+        self,
+        user_id: int,
+        user_input: str,
+        telemetry: dict,
+        current_state: str = "NORMAL"
+    ) -> dict:
+        """
+        Personality OS 主入口
+        
+        协调所有子系统处理用户输入，返回全局响应。
+        """
+        print(f"[PersonalityOS] Processing input for user {user_id}", flush=True)
+        
+        # 1. 检测状态迁移
+        new_state, transition_reason, should_broadcast = self.state_machine.detect_state_transition(
+            current_state, telemetry
+        )
+        
+        if new_state != current_state:
+            print(f"[PersonalityOS] State transition: {current_state} -> {new_state} | {transition_reason}", flush=True)
+            if should_broadcast:
+                self.data_bus.broadcast_event(
+                    event_type="signal",
+                    source="system",
+                    target="all",
+                    payload={
+                        "user_id": user_id,
+                        "event": "state_transition",
+                        "from_state": current_state,
+                        "to_state": new_state,
+                        "reason": transition_reason
+                    },
+                    priority=2
+                )
+        
+        # 2. 计算认知载荷
+        emotion_logs = telemetry.get("emotion_logs", [])
+        behaviors = telemetry.get("recent_behaviors", [])
+        load_scores = self.load_balancer.calculate_cognitive_load(
+            emotion_logs, behaviors, new_state
+        )
+        
+        # 3. 检查熔断
+        energy = telemetry.get("energy_level", 3)
+        should_break, break_reason, break_state = self.load_balancer.should_trigger_circuit_breaker(
+            load_scores, energy
+        )
+        
+        if should_break and new_state not in ["SHAME_COLLAPSE", "LOW_ENERGY"]:
+            new_state = break_state
+            print(f"[PersonalityOS] CIRCUIT BREAKER TRIGGERED: {break_reason}", flush=True)
+            self.data_bus.broadcast_event(
+                event_type="command",
+                source="system",
+                target="all",
+                payload={
+                    "user_id": user_id,
+                    "command": "CIRCUIT_BREAKER",
+                    "new_state": new_state,
+                    "reason": break_reason,
+                    "cognitive_load": load_scores["cognitive"]
+                },
+                priority=1
+            )
+        
+        # 4. 根据状态选择激活的子系统
+        results = {}
+        
+        # 身份认同系统（始终激活）
+        identity_result = self.identity_engine.reinforce_identity(
+            user_history=emotion_logs,
+            recent_behaviors=behaviors,
+            current_emotion_state={"state": new_state, "valence": telemetry.get("valence", 0)}
+        )
+        results["identity"] = identity_result.to_dict()
+        
+        # L0-L4 心理学引擎（在严重崩溃时降级）
+        if new_state != "SHAME_COLLAPSE":
+            from backend.psychology_engine import analyze_emotion
+            psychology_result = analyze_emotion(
+                user_input=user_input,
+                user_id=user_id,
+                history=emotion_logs,
+                intensity=telemetry.get("emotion_intensity", 5)
+            )
+            results["psychology"] = psychology_result
+        else:
+            results["psychology"] = {"degraded": True, "reason": "羞耻崩塌状态，优先身份重建"}
+        
+        # 生成全局配置
+        global_config = self.load_balancer.generate_global_config(new_state, load_scores)
+        
+        # 5. 组装最终响应
+        response = {
+            "personality_os_version": "1.0",
+            "user_id": user_id,
+            "system_state": {
+                "current_state": new_state,
+                "previous_state": current_state,
+                "transition_reason": transition_reason,
+                "circuit_breaker_active": should_break
+            },
+            "cognitive_load": load_scores,
+            "global_config": global_config,
+            "subsystem_results": results,
+            "data_bus_signals": []  # 实际处理后的信号列表
+        }
+        
+        print(f"[PersonalityOS] Processing completed. State: {new_state}", flush=True)
+        return response
+
+
+# 便捷函数
+identity_engine = IdentityReinforcementEngine()
+personality_os = PersonalityOS()
+
+def reinforce_identity(user_history: list, behaviors: list, emotion_state: dict) -> dict:
+    """便捷函数：身份认同强化"""
+    return identity_engine.reinforce_identity(user_history, behaviors, emotion_state).to_dict()
+
+def process_with_personality_os(
+    user_id: int,
+    user_input: str,
+    telemetry: dict,
+    current_state: str = "NORMAL"
+) -> dict:
+    """便捷函数：Personality OS 主入口"""
+    return personality_os.process_user_input(user_id, user_input, telemetry, current_state)
+
+
 if __name__ == "__main__":
     # 测试行为调节
     print("=" * 50)
