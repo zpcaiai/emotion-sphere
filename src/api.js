@@ -988,3 +988,73 @@ export async function setSystemState(newState, token) {
   console.log(`[api] setSystemState ok=${data.ok}`)
   return data
 }
+
+// ── 心理学分析面板 API ───────────────────────────────────
+
+export async function analyzePsychology(emotionText, intensity, includeExperiments, token) {
+  console.log(`[api] analyzePsychology intensity=${intensity}`)
+  const response = await fetch(`${API_BASE}/psychology/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({
+      emotion_text: emotionText,
+      intensity: intensity,
+      include_experiments: includeExperiments
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] analyzePsychology layers=${Object.keys(data.layers || {}).join(',')}`)
+  return data
+}
+
+export async function fetchPsychologyDashboard(token) {
+  console.log(`[api] fetchPsychologyDashboard`)
+  const response = await fetch(`${API_BASE}/psychology/dashboard`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchPsychologyDashboard logs=${data.total_logs}`)
+  return data
+}
+
+export async function fetchBehavioralExperiments(status, limit, token) {
+  console.log(`[api] fetchBehavioralExperiments status=${status}`)
+  const response = await fetch(`${API_BASE}/behavior/experiments?status=${status}&limit=${limit || 10}`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchBehavioralExperiments count=${data.items?.length || 0}`)
+  return data
+}
+
+export async function completeBehavioralExperiment(expId, outcome, reflection, token) {
+  console.log(`[api] completeBehavioralExperiment ${expId}`)
+  const response = await fetch(`${API_BASE}/behavior/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({
+      experiment_id: expId,
+      outcome,
+      reflection
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] completeBehavioralExperiment ok=${data.success}`)
+  return data
+}
