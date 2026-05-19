@@ -798,3 +798,81 @@ export async function fetchHabitsDashboard(token) {
   console.log(`[api] fetchHabitsDashboard tokens=${data.token_balance}`)
   return data
 }
+
+// ── 执行力边缘引导系统 API ───────────────────────────────────
+
+export async function detectExecutionParalysis(rawTask, edgeContext, telemetrySignals, token) {
+  console.log(`[api] detectExecutionParalysis task=${rawTask.slice(0, 30)}...`)
+  const response = await fetch(`${API_BASE}/execution/detect-intervene`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ raw_task: rawTask, edge_context: edgeContext, telemetry_signals: telemetrySignals }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] detectExecutionParalysis type=${data.paralysis_type} risk=${data.collapse_risk}`)
+  return data
+}
+
+export async function generateMicroChain(task, steps = 3) {
+  console.log(`[api] generateMicroChain steps=${steps}`)
+  const response = await fetch(`${API_BASE}/execution/micro-chain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task, steps }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] generateMicroChain chain_length=${data.decoupled_chain?.length || 0}`)
+  return data
+}
+
+export async function logIntervention(wasCompleted, completionPercentage, postInterventionMood, token) {
+  console.log(`[api] logIntervention completed=${wasCompleted} mood=${postInterventionMood}`)
+  const response = await fetch(`${API_BASE}/execution/log-intervention`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ was_completed: wasCompleted, completion_percentage: completionPercentage, post_intervention_mood: postInterventionMood }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] logIntervention momentum=${data.micro_momentum?.momentum_score}`)
+  return data
+}
+
+export async function fetchExecutionDashboard(token) {
+  console.log(`[api] fetchExecutionDashboard`)
+  const response = await fetch(`${API_BASE}/execution/dashboard`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchExecutionDashboard momentum=${data.current_momentum}`)
+  return data
+}
+
+export async function fetchActiveMicroSessions(token) {
+  console.log(`[api] fetchActiveMicroSessions`)
+  const response = await fetch(`${API_BASE}/execution/active-sessions`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchActiveMicroSessions count=${data.items?.length || 0}`)
+  return data
+}

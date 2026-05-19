@@ -669,6 +669,179 @@ SELECT
 FROM users u;
 
 -- ============================================================
+-- 子系统三：执行力边缘引导系统 (Edge Execution Intervention)
+-- ============================================================
+
+-- 18. 执行力崩溃检测日志 (实时边缘监测)
+CREATE TABLE IF NOT EXISTS execution_paralysis_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 检测到的崩溃信号
+    paralysis_type  VARCHAR(50),  -- distraction/procrastination/anxiety_avoidance/emotional_collapse
+    detected_signals JSONB[],     -- [{signal_type, description, intensity}]
+    
+    -- 原始任务上下文
+    raw_backlog_task    TEXT,     -- 用户正在拖延的大任务
+    edge_context        JSONB,    -- {hardware, location, time, battery, noise_level}
+    
+    -- 环境遥测
+    tab_switch_count    INTEGER,  -- 检测到的高频切换次数
+    idle_duration_seconds INTEGER, -- 无意义浏览/空闲时长
+    window_thrashing    BOOLEAN DEFAULT FALSE,  -- 系统抖动标志
+    
+    -- 干预执行
+    intervention_triggered  BOOLEAN DEFAULT FALSE,
+    ignition_sequence_delivered TEXT, -- 2分钟点火序列内容
+    user_responded      BOOLEAN DEFAULT FALSE,
+    response_latency_seconds INTEGER, -- 用户响应延迟
+    
+    -- 结果
+    ignition_completed  BOOLEAN DEFAULT FALSE,
+    task_restarted      BOOLEAN DEFAULT FALSE,
+    post_intervention_mood INTEGER CHECK (post_intervention_mood BETWEEN 1 AND 10),
+    
+    detected_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    intervened_at       TIMESTAMP,
+    completed_at        TIMESTAMP
+);
+
+CREATE INDEX idx_paralysis_logs_user ON execution_paralysis_logs(user_id);
+CREATE INDEX idx_paralysis_logs_time ON execution_paralysis_logs(detected_at DESC);
+CREATE INDEX idx_paralysis_logs_type ON execution_paralysis_logs(paralysis_type);
+
+-- 19. 微调度器会话 (实时微干预追踪)
+CREATE TABLE IF NOT EXISTS micro_scheduler_sessions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    paralysis_log_id UUID REFERENCES execution_paralysis_logs(id) ON DELETE SET NULL,
+    
+    -- 会话状态
+    session_status  VARCHAR(20) DEFAULT 'active', -- active/paused/completed/abandoned
+    
+    -- 任务解耦链
+    original_task       TEXT,       -- 原始大任务
+    decoupled_chain     JSONB[],    -- [{step_id, action, duration_sec, completed}]
+    current_step_index  INTEGER DEFAULT 0,
+    
+    -- 环境隔离配置
+    context_isolation   JSONB,      -- {hidden_tabs, muted_notifications, focused_window}
+    noise_floor_level   INTEGER CHECK (noise_floor_level BETWEEN 1 AND 10),
+    
+    -- 实时反馈
+    telemetry_signals   JSONB[],    -- 用户反馈信号序列
+    last_user_signal_at TIMESTAMP,
+    
+    -- 成果
+    steps_completed     INTEGER DEFAULT 0,
+    total_steps         INTEGER,
+    micro_momentum_score INTEGER CHECK (micro_momentum_score BETWEEN 1 AND 100),
+    
+    started_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_step_at        TIMESTAMP,
+    completed_at        TIMESTAMP
+);
+
+CREATE INDEX idx_micro_scheduler_user ON micro_scheduler_sessions(user_id);
+CREATE INDEX idx_micro_scheduler_status ON micro_scheduler_sessions(session_status);
+
+-- 20. 执行意图模板库 (Implementation Intentions Library)
+CREATE TABLE IF NOT EXISTS implementation_intentions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 意图定义 (If-Then 格式)
+    intention_name      VARCHAR(200),
+    if_trigger          TEXT,       -- "如果..." (环境锚点)
+    then_action         TEXT,       -- "那么..." (原子动作)
+    
+    -- 上下文匹配条件
+    applicable_contexts JSONB,      -- [{time_range, location, energy_level, device_type}]
+    
+    -- 效果统计
+    usage_count         INTEGER DEFAULT 0,
+    success_rate        INTEGER CHECK (success_rate BETWEEN 0 AND 100),
+    avg_completion_time_seconds INTEGER,
+    
+    is_active           BOOLEAN DEFAULT TRUE,
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_used_at        TIMESTAMP
+);
+
+CREATE INDEX idx_intentions_user ON implementation_intentions(user_id);
+CREATE INDEX idx_intentions_active ON implementation_intentions(user_id, is_active);
+
+-- 21. 边缘干预效果追踪
+CREATE TABLE IF NOT EXISTS edge_intervention_analytics (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 统计周期
+    period_type     VARCHAR(20),  -- daily/weekly/monthly
+    period_start    DATE,
+    period_end      DATE,
+    
+    -- 崩溃指标
+    paralysis_events_count      INTEGER DEFAULT 0,
+    avg_detection_latency_seconds INTEGER, -- 从崩溃开始到检测到的平均时间
+    
+    -- 干预效果
+    interventions_triggered     INTEGER DEFAULT 0,
+    ignition_completion_rate    INTEGER CHECK (ignition_completion_rate BETWEEN 0 AND 100),
+    task_restart_success_rate   INTEGER CHECK (task_restart_success_rate BETWEEN 0 AND 100),
+    
+    -- 系统健康度
+    micro_momentum_avg          INTEGER CHECK (micro_momentum_avg BETWEEN 1 AND 100),
+    continuity_preservation_score INTEGER CHECK (continuity_preservation_score BETWEEN 1 AND 100),
+    
+    -- 洞察
+    top_paralysis_triggers      TEXT[],
+    most_effective_ignitions    JSONB[],
+    recommended_adjustments     TEXT[],
+    
+    calculated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_edge_analytics_user ON edge_intervention_analytics(user_id);
+CREATE INDEX idx_edge_analytics_period ON edge_intervention_analytics(user_id, period_type, period_start DESC);
+
+-- 执行力系统仪表盘视图
+CREATE OR REPLACE VIEW user_execution_dashboard AS
+SELECT 
+    u.id as user_id,
+    
+    -- 今日崩溃检测数
+    (SELECT COUNT(*) FROM execution_paralysis_logs 
+     WHERE user_id = u.id AND detected_at >= CURRENT_DATE) as today_paralysis_events,
+    
+    -- 活跃微调度器会话
+    (SELECT COUNT(*) FROM micro_scheduler_sessions 
+     WHERE user_id = u.id AND session_status = 'active') as active_micro_sessions,
+    
+    -- 总干预成功率
+    (SELECT COALESCE(AVG(
+        CASE WHEN ignition_completed THEN 100 ELSE 0 END
+     ), 0)::INTEGER 
+     FROM execution_paralysis_logs 
+     WHERE user_id = u.id AND detected_at >= CURRENT_DATE - INTERVAL '7 days') as weekly_success_rate,
+    
+    -- 最常检测到的崩溃类型
+    (SELECT paralysis_type FROM execution_paralysis_logs 
+     WHERE user_id = u.id AND detected_at >= CURRENT_DATE - INTERVAL '7 days'
+     GROUP BY paralysis_type ORDER BY COUNT(*) DESC LIMIT 1) as top_paralysis_type,
+    
+    -- 当前微动量分数
+    (SELECT micro_momentum_score FROM micro_scheduler_sessions 
+     WHERE user_id = u.id AND session_status = 'active'
+     ORDER BY started_at DESC LIMIT 1) as current_momentum,
+    
+    -- 保存的执行意图数
+    (SELECT COUNT(*) FROM implementation_intentions 
+     WHERE user_id = u.id AND is_active = TRUE) as active_intentions
+
+FROM users u;
+
+-- ============================================================
 -- 初始化说明
 -- ============================================================
 -- 执行顺序：

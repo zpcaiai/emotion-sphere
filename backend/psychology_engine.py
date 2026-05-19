@@ -1037,6 +1037,425 @@ def create_habit(habit_name: str, anchor: str = "", energy: int = 3) -> dict:
     return habit_coordinator.create_and_execute(habit_name, energy, anchor)
 
 
+# ============================================================
+# 子系统三：执行力边缘引导系统 (Edge Execution Intervention)
+# ============================================================
+
+@dataclass
+class ExecutionParalysisResult:
+    """执行力崩溃检测结果"""
+    paralysis_type: str = ""
+    detected_signals: list = field(default_factory=list)
+    collapse_risk: int = 5  # 1-10
+    ignition_sequence: str = ""
+    context_handled: dict = field(default_factory=dict)
+    recovery_plan: str = ""
+    low_pressure_guide: str = ""
+    
+    def to_dict(self) -> dict:
+        return {
+            "paralysis_type": self.paralysis_type,
+            "detected_signals": self.detected_signals,
+            "collapse_risk": self.collapse_risk,
+            "ignition_sequence": self.ignition_sequence,
+            "context_handled": self.context_handled,
+            "recovery_plan": self.recovery_plan,
+            "low_pressure_guide": self.low_pressure_guide
+        }
+
+
+@dataclass
+class IgnitionStep:
+    """2分钟点火序列步骤"""
+    step_id: str = ""
+    action: str = ""
+    duration_seconds: int = 120
+    completed: bool = False
+    isolation_instruction: str = ""  # 环境隔离指令
+
+
+class ExecutionEdgeInterventionEngine:
+    """
+    执行力边缘引导系统 (L2 Execution Layer)
+    
+    核心原理：
+    - 执行意图 (Implementation Intentions): If-Then 自动化触发
+    - 实时微调度器: 检测到系统抖动(Thrashing)时发出中断信号
+    - 任务降维解耦: 将宏任务拆解为120秒原子动作
+    
+    检测到以下崩溃信号时触发干预：
+    - 注意力漂移 (高频切换)
+    - 焦虑逃避 (任务回避)
+    - 情绪崩塌前兆
+    - 自我否定语言
+    - 明知道该做却不做的状态
+    """
+    
+    SYSTEM_PROMPT_DETECTION = """你是"实时执行力边缘干预系统（Execution Edge Intervention Engine）"。
+
+任务：检测用户当前是否处于执行力崩溃边缘，并生成即时干预方案。
+
+识别以下崩溃信号：
+- attention_drift: 注意力漂移，高频切换行为
+- anxiety_avoidance: 焦虑逃避，面对任务产生回避
+- emotional_collapse: 情绪崩塌前兆
+- procrastination_loop: 拖延循环，明知道该做却不做
+- self_negation: 自我否定语言
+- window_thrashing: 窗口系统抖动（IDE和浏览器反复切换）
+
+核心原则：
+- 不批评、不施压、不强化羞耻
+- 不使用命令语气
+- 优先恢复掌控感
+- 优先恢复行为连续性
+- 降低任务压力
+- 提供最小动作
+
+输出严格JSON格式：
+{
+  "paralysis_type": "崩溃类型",
+  "detected_signals": [
+    {"signal_type": "信号类型", "description": "具体表现", "intensity": 1-10}
+  ],
+  "collapse_risk": 1-10,
+  "ignition_sequence": "2分钟可完成的原子动作，极其具体",
+  "context_isolation": {
+    "hidden_tabs": ["应隐藏的tab类型"],
+    "muted_notifications": true/false,
+    "focused_window": "应聚焦的窗口"
+  },
+  "recovery_plan": "恢复掌控感的3步计划",
+  "low_pressure_guide": "温柔低压力的引导语，避免命令式"
+}"""
+
+    SYSTEM_PROMPT_IGNITION = """# Role
+Edge Context-Aware Micro-Scheduler (Execution Layer)
+
+# Purpose
+Intercept acute user procrastination by executing emergency task-decoupling protocol. Convert massive backlog into single, un-failable, 120-second immediate action.
+
+# Operational Rules
+1. DO NOT give productivity advice, pep talks, or time-management platitudes.
+2. Output must be punchy, highly visual, readable in under 15 seconds.
+3. Isolate environment: Hide all downstream dependencies. User sees only immediate 120-second horizon.
+
+# Core Logic
+1. Analyze context constraints (noise, energy, device).
+2. Apply Task Decoupling: Break into atomic unit with asymptotically zero energy barrier.
+3. Generate "2-Minute Ignition Sequence".
+
+# Output Format
+⚠️ **EXECUTION PARALYSIS DETECTED // INITIALIZING EDGE INTERRUPT ROUTINE...**
+
+[⚙️ Context Handled]: {environment_details}
+[🛑 Noise Isolated]: Downstream deadlines muted. Focus window restricted to next T+120 seconds.
+
+---
+
+### 🚀 THE 2-MINUTE IGNITION SEQUENCE:
+> **Do not write the whole item. Execute ONLY this mechanical movement right now:**
+> 
+> **[INSERT EXACT ATOMIC ACTION HERE]**
+
+---
+*📊 Telemetry: Once complete, signal '1' to unlock next micro-step. Do not think. Move fingers now.*"""
+
+    def detect_and_intervene(
+        self,
+        raw_backlog_task: str,
+        edge_context: dict,
+        telemetry_signals: list
+    ) -> ExecutionParalysisResult:
+        """
+        检测执行力崩溃并生成干预方案
+        
+        Args:
+            raw_backlog_task: 用户正在拖延的大任务
+            edge_context: 环境上下文 {hardware, location, time, battery, noise_level}
+            telemetry_signals: 遥测信号 [{type, description, duration}]
+        """
+        # 构建检测上下文
+        context = f"原始任务: {raw_backlog_task}\n\n"
+        context += f"环境上下文: {json.dumps(edge_context, ensure_ascii=False)}\n\n"
+        context += f"遥测信号: {json.dumps(telemetry_signals, ensure_ascii=False)}\n\n"
+        
+        # 分析是否处于崩溃状态
+        is_paralyzed = self._check_paralysis_indicators(telemetry_signals)
+        
+        if not is_paralyzed:
+            return ExecutionParalysisResult(
+                paralysis_type="none",
+                detected_signals=[],
+                collapse_risk=3,
+                ignition_sequence="继续当前节奏，系统未检测到崩溃风险",
+                low_pressure_guide="状态良好，保持当前节奏。如需帮助随时触发干预。"
+            )
+        
+        try:
+            if call_chat:
+                raw = call_chat(self.SYSTEM_PROMPT_DETECTION, context, temperature=0.3)
+            else:
+                raw = self._mock_detection(raw_backlog_task, edge_context)
+            
+            data = self._parse_json(raw)
+            
+            # 生成点火序列（更具体的格式）
+            ignition = self._generate_ignition_sequence(
+                raw_backlog_task, 
+                edge_context, 
+                data.get("detected_signals", [])
+            )
+            
+            return ExecutionParalysisResult(
+                paralysis_type=data.get("paralysis_type", "procrastination"),
+                detected_signals=data.get("detected_signals", []),
+                collapse_risk=data.get("collapse_risk", 7),
+                ignition_sequence=ignition,
+                context_handled=data.get("context_isolation", {}),
+                recovery_plan=data.get("recovery_plan", ""),
+                low_pressure_guide=data.get("low_pressure_guide", self._fallback_guide())
+            )
+            
+        except Exception as e:
+            print(f"[ExecutionEdge] Detection failed: {e}", flush=True)
+            return self._fallback_intervention(raw_backlog_task, edge_context)
+    
+    def _check_paralysis_indicators(self, signals: list) -> bool:
+        """检查是否存在崩溃指标"""
+        if not signals:
+            return False
+        
+        # 检测关键指标
+        paralysis_indicators = [
+            "tab_switch", "window_thrashing", "idle", "distraction",
+            "procrastination", "avoidance", "anxiety_peak", "self_negation"
+        ]
+        
+        for signal in signals:
+            sig_type = signal.get("type", "").lower()
+            duration = signal.get("duration_seconds", 0)
+            
+            # 高频切换超过20秒
+            if sig_type in ["tab_switch", "window_thrashing"] and duration > 20:
+                return True
+            
+            # 空闲/拖延超过5分钟
+            if sig_type in ["idle", "procrastination"] and duration > 300:
+                return True
+            
+            # 焦虑峰值或自我否定
+            if sig_type in ["anxiety_peak", "self_negation"]:
+                return True
+        
+        return False
+    
+    def _generate_ignition_sequence(self, task: str, context: dict, signals: list) -> str:
+        """生成2分钟点火序列"""
+        # 根据环境选择适合的动作类型
+        noise_level = context.get("noise_level", 5)
+        
+        if noise_level > 7:
+            # 嘈杂环境：选择机械性、低认知负荷的动作
+            template = f"""⚠️ **EXECUTION PARALYSIS DETECTED**
+
+[⚙️ Context]: {context.get('location', '当前环境')} | 噪音: {noise_level}/10 | 电池: {context.get('battery', 'unknown')}
+[🛑 Isolated]: 所有截止期限已静音。只看接下来120秒。
+
+---
+
+### 🚀 THE 2-MINUTE IGNITION SEQUENCE:
+> **不要写完整内容。只执行这个机械动作：**
+>
+> **打开与"{task[:30]}..."相关的文件/应用，只创建一个空白文档，
+> 在里面打3个无意义的字符，然后停下。**
+
+---
+*📊 完成后按空格键或回复'1'解锁下一步。不要思考，动手指。*"""
+        else:
+            # 安静环境：可以选择需要一点认知的动作
+            template = f"""⚠️ **EXECUTION PARALYSIS DETECTED**
+
+[⚙️ Context]: {context.get('location', '当前环境')} | 专注窗口: T+120秒
+[🛑 Isolated]: 下游依赖已隐藏
+
+---
+
+### 🚀 THE 2-MINUTE IGNITION SEQUENCE:
+> **不要完成整个任务。只执行这个原子动作：**
+>
+> **为"{task[:30]}..."写下第一句话/第一个标题/第一步的名称。
+> 不需要完整，不需要正确。只要打出来。**
+
+---
+*📊 完成后回复'1'。不要编辑，不要思考，只打字。*"""
+        
+        return template
+    
+    def generate_decoupled_chain(self, original_task: str, steps: int = 3) -> list:
+        """
+        将大任务解耦为微步骤链
+        
+        Args:
+            original_task: 原始大任务
+            steps: 希望拆解的步骤数
+            
+        Returns:
+            IgnitionStep 列表
+        """
+        try:
+            prompt = f"将任务'{original_task}'拆解为{steps}个2分钟可完成的极小微步骤。每个步骤必须是具体的、机械的动作。输出JSON数组: [{{'step_id': '1', 'action': '具体动作', 'duration_seconds': 120}}]"
+            
+            if call_chat:
+                raw = call_chat("你是一个任务拆解专家，只输出JSON", prompt, temperature=0.4)
+                data = self._parse_json(raw)
+                if isinstance(data, list):
+                    return [IgnitionStep(**step) for step in data]
+            
+            # 降级：手动生成
+            return self._fallback_chain(original_task, steps)
+            
+        except Exception as e:
+            print(f"[ExecutionEdge] Chain generation failed: {e}", flush=True)
+            return self._fallback_chain(original_task, steps)
+    
+    def _fallback_chain(self, task: str, steps: int) -> list:
+        """降级微步骤链"""
+        return [
+            IgnitionStep("1", f"打开与'{task[:20]}...'相关的应用/文件", 60, False, "关闭所有其他标签页"),
+            IgnitionStep("2", f"只写下第一个字/标题/步骤名称", 120, False, "不要删除，不要编辑"),
+            IgnitionStep("3", f"保存或标记这个位置", 60, False, "告诉自己'我在这'"),
+        ]
+    
+    def _fallback_intervention(self, task: str, context: dict) -> ExecutionParalysisResult:
+        """降级干预"""
+        return ExecutionParalysisResult(
+            paralysis_type="procrastination",
+            detected_signals=[{"signal_type": "system_timeout", "description": "检测超时", "intensity": 5}],
+            collapse_risk=6,
+            ignition_sequence=f"打开与'{task[:30]}...'相关的应用，什么都不做，只是打开",
+            context_handled={"muted_notifications": True, "focused_window": "工作窗口"},
+            recovery_plan="1. 打开应用 2. 深呼吸 3. 打一个字符",
+            low_pressure_guide="系统检测到你可能需要支持。不用完成任何任务，只是打开那个窗口就好。"
+        )
+    
+    def _fallback_guide(self) -> str:
+        """降级引导语"""
+        return "不用着急，不用完美。只是启动就好。"
+    
+    def _parse_json(self, raw: str) -> dict:
+        try:
+            return json.loads(raw.strip())
+        except:
+            for p in [r'```json\s*(.*?)\s*```', r'```\s*(.*?)\s*```', r'\{.*\}']:
+                for m in re.findall(p, raw, re.DOTALL):
+                    try:
+                        return json.loads(m.strip())
+                    except:
+                        continue
+        return {}
+    
+    def _mock_detection(self, task: str, context: dict) -> str:
+        """模拟检测结果"""
+        return json.dumps({
+            "paralysis_type": "procrastination_loop",
+            "detected_signals": [
+                {"signal_type": "tab_switch", "description": "IDE和浏览器反复切换20分钟", "intensity": 8},
+                {"signal_type": "anxiety_peak", "description": "任务压力过大产生回避", "intensity": 7}
+            ],
+            "collapse_risk": 7,
+            "context_isolation": {
+                "hidden_tabs": ["social_media", "news", "entertainment"],
+                "muted_notifications": True,
+                "focused_window": "工作区"
+            },
+            "recovery_plan": "1. 2分钟点火启动 2. 微步骤链执行 3. 连续性保持",
+            "low_pressure_guide": "检测到你可能卡住了。这不是你的问题，是任务太大了。我们把它变小。"
+        })
+
+
+class MicroMomentumTracker:
+    """
+    微动量追踪器
+    记录用户在微步骤链中的动量积累
+    """
+    
+    def calculate_momentum(self, completed_steps: int, total_steps: int, avg_completion_time: float) -> int:
+        """
+        计算微动量分数 (1-100)
+        
+        Args:
+            completed_steps: 已完成步骤数
+            total_steps: 总步骤数
+            avg_completion_time: 平均完成时间（秒）
+        """
+        if total_steps == 0:
+            return 50
+        
+        # 完成比例权重 60%
+        completion_ratio = completed_steps / total_steps
+        
+        # 速度权重 40%（越快越好，但有一个合理上限）
+        # 理想完成时间是预计时间的0.8-1.2倍
+        expected_time = 120  # 每步预计120秒
+        speed_ratio = min(1.0, expected_time / max(avg_completion_time, 30))
+        
+        momentum = int((completion_ratio * 0.6 + speed_ratio * 0.4) * 100)
+        return max(1, min(100, momentum))
+    
+    def generate_momentum_feedback(self, momentum_score: int) -> str:
+        """根据动量分数生成反馈"""
+        if momentum_score >= 80:
+            return "🚀 微动量强劲！保持这个节奏，你正在进入心流状态。"
+        elif momentum_score >= 60:
+            return "📈 动量正在积累。再完成一步，你会感觉更好。"
+        elif momentum_score >= 40:
+            return "🔄 动量稳定。不需要加速，保持连续性就是胜利。"
+        else:
+            return "🛡️ 动量较低，但连续性保持。这是智能保护模式，不是失败。"
+
+
+# 单例
+execution_edge_engine = ExecutionEdgeInterventionEngine()
+momentum_tracker = MicroMomentumTracker()
+
+
+def detect_execution_paralysis(
+    raw_task: str,
+    context: dict,
+    signals: list
+) -> dict:
+    """
+    便捷函数：检测执行力崩溃
+    
+    Args:
+        raw_task: 原始任务描述
+        context: 环境上下文 {hardware, location, time, battery, noise_level}
+        signals: 遥测信号 [{type, description, duration_seconds}]
+        
+    Returns:
+        ExecutionParalysisResult 字典
+    """
+    return execution_edge_engine.detect_and_intervene(raw_task, context, signals).to_dict()
+
+
+def generate_micro_chain(task: str, steps: int = 3) -> list:
+    """便捷函数：生成微步骤链"""
+    chain = execution_edge_engine.generate_decoupled_chain(task, steps)
+    return [
+        {"step_id": s.step_id, "action": s.action, "duration_seconds": s.duration_seconds}
+        for s in chain
+    ]
+
+
+def calculate_micro_momentum(completed: int, total: int, avg_time: float) -> dict:
+    """便捷函数：计算微动量"""
+    score = momentum_tracker.calculate_momentum(completed, total, avg_time)
+    return {
+        "momentum_score": score,
+        "feedback": momentum_tracker.generate_momentum_feedback(score)
+    }
+
+
 if __name__ == "__main__":
     # 测试行为调节
     print("=" * 50)

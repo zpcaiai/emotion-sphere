@@ -1644,6 +1644,243 @@ def habits_dashboard(request: Request):
         _release_db(conn)
 
 
+# ── 子系统三：执行力边缘引导 API ─────────────────────────────
+
+class EdgeInterventionRequest(BaseModel):
+    raw_task: str = Field(min_length=1, max_length=1000)
+    edge_context: dict = Field(default_factory=dict)
+    telemetry_signals: list = Field(default_factory=list)
+
+
+class MicroChainRequest(BaseModel):
+    task: str = Field(min_length=1, max_length=500)
+    steps: int = Field(default=3, ge=1, le=10)
+
+
+class InterventionLogRequest(BaseModel):
+    paralysis_type: str = Field(default='')
+    detected_signals: list = Field(default_factory=list)
+    ignition_sequence: str = Field(default='')
+    was_completed: bool = Field(default=False)
+    completion_percentage: int = Field(default=0, ge=0, le=100)
+    post_intervention_mood: int = Field(default=5, ge=1, le=10)
+
+
+@app.post('/api/execution/detect-intervene')
+def execution_detect_intervene(payload: EdgeInterventionRequest, request: Request):
+    """
+    执行力边缘干预 - 检测崩溃并生成2分钟点火序列
+    
+    实时微调度器：检测到系统抖动时发出中断信号
+    """
+    try:
+        from backend.psychology_engine import detect_execution_paralysis
+        result = detect_execution_paralysis(
+            raw_task=payload.raw_task,
+            context=payload.edge_context,
+            signals=payload.telemetry_signals
+        )
+        
+        # 如果检测到崩溃，记录到数据库
+        user = _optional_user(request)
+        if user and result.get('paralysis_type') != 'none':
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    cur.execute(
+                        '''INSERT INTO execution_paralysis_logs 
+                           (user_id, paralysis_type, detected_signals, raw_backlog_task,
+                            edge_context, intervention_triggered, ignition_sequence_delivered)
+                           VALUES (%s, %s, %s, %s, %s, TRUE, %s)
+                           RETURNING id''',
+                        (user['id'], result.get('paralysis_type'), 
+                         json.dumps(result.get('detected_signals', [])),
+                         payload.raw_task,
+                         json.dumps(payload.edge_context),
+                         result.get('ignition_sequence'))
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    result['log_id'] = str(row[0])
+                _release_db(conn)
+            except Exception as e:
+                print(f'[execution] Failed to log: {e}', flush=True)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[execution_detect] Failed: {exc}', flush=True)
+        return {
+            'paralysis_type': 'system_error',
+            'collapse_risk': 5,
+            'ignition_sequence': '深呼吸3次，然后尝试任务的最小版本',
+            'low_pressure_guide': '系统暂时无法分析，请温柔地对待自己',
+            'error': str(exc)
+        }
+
+
+@app.post('/api/execution/micro-chain')
+def execution_micro_chain(payload: MicroChainRequest):
+    """
+    生成任务微步骤链 - 降维解耦
+    
+    将大任务拆解为3个2分钟可完成的原子步骤
+    """
+    try:
+        from backend.psychology_engine import generate_micro_chain
+        chain = generate_micro_chain(payload.task, payload.steps)
+        return {
+            'task': payload.task,
+            'decoupled_chain': chain,
+            'total_duration_estimate': sum(s.get('duration_seconds', 120) for s in chain)
+        }
+    except Exception as exc:
+        print(f'[execution_chain] Failed: {exc}', flush=True)
+        return {
+            'task': payload.task,
+            'decoupled_chain': [
+                {'step_id': '1', 'action': f'打开与{payload.task[:20]}相关的应用', 'duration_seconds': 60},
+                {'step_id': '2', 'action': '执行第一个可见的小动作', 'duration_seconds': 120},
+                {'step_id': '3', 'action': '标记完成或保存进度', 'duration_seconds': 60}
+            ],
+            'error': str(exc)
+        }
+
+
+@app.post('/api/execution/log-intervention')
+def log_intervention(payload: InterventionLogRequest, request: Request):
+    """
+    记录干预执行结果和微动量
+    """
+    user = _optional_user(request)
+    if not user:
+        return {'ok': True, 'warning': 'Not logged in, not saved'}
+    
+    user_id = user['id']
+    
+    try:
+        conn = _get_db()
+        with conn.cursor() as cur:
+            # 更新最近一条崩溃日志
+            cur.execute(
+                '''UPDATE execution_paralysis_logs 
+                   SET user_responded = TRUE,
+                       ignition_completed = %s,
+                       completion_percentage = %s,
+                       post_intervention_mood = %s,
+                       completed_at = NOW()
+                   WHERE user_id = %s AND user_responded = FALSE
+                   ORDER BY detected_at DESC
+                   LIMIT 1
+                   RETURNING id''',
+                (payload.was_completed, payload.completion_percentage, 
+                 payload.post_intervention_mood, user_id)
+            )
+            row = cur.fetchone()
+            conn.commit()
+            
+            # 计算微动量
+            from backend.psychology_engine import calculate_micro_momentum
+            momentum = calculate_micro_momentum(
+                completed=1 if payload.was_completed else 0,
+                total=3,  # 默认3步
+                avg_time=120  # 默认120秒
+            )
+            
+            return {
+                'ok': True,
+                'updated_log_id': str(row[0]) if row else None,
+                'micro_momentum': momentum
+            }
+    except Exception as exc:
+        print(f'[execution_log] Failed: {exc}', flush=True)
+        return {'ok': False, 'error': str(exc)}
+    finally:
+        try:
+            _release_db(conn)
+        except:
+            pass
+
+
+@app.get('/api/execution/dashboard')
+def execution_dashboard(request: Request):
+    """
+    执行力系统仪表盘 - 实时边缘引导状态
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT today_paralysis_events, active_micro_sessions,
+                          weekly_success_rate, top_paralysis_type,
+                          current_momentum, active_intentions
+                   FROM user_execution_dashboard 
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'today_paralysis_events': 0,
+                    'active_micro_sessions': 0,
+                    'weekly_success_rate': 0,
+                    'top_paralysis_type': None,
+                    'current_momentum': 50,
+                    'active_intentions': 0
+                }
+            
+            return {
+                'today_paralysis_events': row[0] or 0,
+                'active_micro_sessions': row[1] or 0,
+                'weekly_success_rate': row[2] or 0,
+                'top_paralysis_type': row[3],
+                'current_momentum': row[4] or 50,
+                'active_intentions': row[5] or 0
+            }
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/execution/active-sessions')
+def active_micro_sessions(request: Request):
+    """获取用户活跃的微调度器会话"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, original_task, decoupled_chain, current_step_index,
+                          steps_completed, total_steps, micro_momentum_score,
+                          started_at
+                   FROM micro_scheduler_sessions 
+                   WHERE user_id = %s AND session_status = 'active'
+                   ORDER BY started_at DESC''',
+                (user_id,)
+            )
+            rows = cur.fetchall()
+            
+            items = [{
+                'id': str(r[0]),
+                'original_task': r[1],
+                'decoupled_chain': r[2],
+                'current_step': r[3],
+                'steps_completed': r[4],
+                'total_steps': r[5],
+                'momentum_score': r[6],
+                'started_at': r[7].isoformat() if r[7] else None
+            } for r in rows]
+            
+            return {'items': items, 'total': len(items)}
+    finally:
+        _release_db(conn)
+
+
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
 
 if FRONTEND_DIST.exists():
