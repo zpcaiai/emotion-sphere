@@ -53,16 +53,55 @@ class PersonalityDriver:
 
 @dataclass
 class CognitiveSchema:
-    """L1: 认知图式"""
+    """
+    L1: 认知图式 - 完整CBT ABC模型分层
+    
+    基于Beck认知疗法的三层信念系统：
+    - 自动思维 (Automatic Thoughts): 表层，情境化的自我对话
+    - 中间信念 (Intermediate Beliefs): 中层，态度、规则、假设
+    - 核心信念 (Core Beliefs): 深层，关于自我、他人、世界的根本信念
+    """
     schema_id: str = ""
     schema_name: str = ""
-    distortion_type: str = ""
-    activating_event: str = ""
-    consequence_emotional: str = ""
-    consequence_behavioral: str = ""
-    core_belief: str = ""
-    cognitive_reframing_patch: str = ""
-    severity_score: int = 5
+    distortion_type: str = ""  # 认知扭曲类型
+    
+    # A: Activating Event 诱发事件
+    activating_event: str = ""  # 客观触发情境
+    event_context: dict = field(default_factory=dict)  # {where, when, who, what}
+    
+    # B: Belief System 信念系统（三层结构）
+    # Layer 1: 自动思维 - 表层的、情境化的认知
+    automatic_thought: str = ""  # 情境化的自我对话，如"我肯定会失败"
+    automatic_thought_image: str = ""  # 如果思维以图像形式出现
+    
+    # Layer 2: 中间信念 - 中层的条件化规则
+    intermediate_belief_attitude: str = ""  # 态度，如"失败是可怕的"
+    intermediate_belief_rules: str = ""  # 规则/应该陈述，如"我必须完美"
+    intermediate_belief_assumptions: str = ""  # 条件假设，如"如果我失败，别人会嘲笑我"
+    
+    # Layer 3: 核心信念 - 深层的无条件化信念
+    core_belief_self: str = ""  # 关于自我的核心信念，如"我无能"
+    core_belief_others: str = ""  # 关于他人的核心信念，如"他人会伤害我"
+    core_belief_world: str = ""  # 关于世界的核心信念，如"世界是危险的"
+    
+    # C: Consequences 后果（情绪、行为、生理）
+    consequence_emotional: str = ""  # 情绪后果
+    consequence_behavioral: str = ""  # 行为后果
+    consequence_physiological: str = ""  # 生理反应（基于身心连接）
+    
+    # 认知重构 - 针对各层的反向陈述
+    reframing_automatic: str = ""  # 重构自动思维
+    reframing_intermediate: str = ""  # 重构中间信念
+    reframing_core: str = ""  # 重构核心信念
+    cognitive_reframing_patch: str = ""  # 综合重构语句
+    
+    # 证据收集 - 支持认知重构
+    evidence_against: list = field(default_factory=list)  # 反驳证据
+    evidence_for_alternative: list = field(default_factory=list)  # 支持替代信念的证据
+    
+    # 严重程度评估
+    severity_score: int = 5  # 1-10严重程度
+    belief_strength: int = 5  # 对信念的相信程度1-10
     
     def to_dict(self) -> dict:
         return {
@@ -70,11 +109,33 @@ class CognitiveSchema:
             "schema_name": self.schema_name,
             "distortion_type": self.distortion_type,
             "activating_event": self.activating_event,
-            "consequence_emotional": self.consequence_emotional,
-            "consequence_behavioral": self.consequence_behavioral,
-            "core_belief": self.core_belief,
-            "cognitive_reframing_patch": self.cognitive_reframing_patch,
-            "severity_score": self.severity_score
+            "event_context": self.event_context,
+            "belief_hierarchy": {
+                "automatic_thought": self.automatic_thought,
+                "intermediate_beliefs": {
+                    "attitude": self.intermediate_belief_attitude,
+                    "rules": self.intermediate_belief_rules,
+                    "assumptions": self.intermediate_belief_assumptions
+                },
+                "core_beliefs": {
+                    "self": self.core_belief_self,
+                    "others": self.core_belief_others,
+                    "world": self.core_belief_world
+                }
+            },
+            "consequences": {
+                "emotional": self.consequence_emotional,
+                "behavioral": self.consequence_behavioral,
+                "physiological": self.consequence_physiological
+            },
+            "reframing": {
+                "automatic": self.reframing_automatic,
+                "intermediate": self.reframing_intermediate,
+                "core": self.reframing_core,
+                "synthesis": self.cognitive_reframing_patch
+            },
+            "severity_score": self.severity_score,
+            "belief_strength": self.belief_strength
         }
 
 
@@ -278,23 +339,77 @@ class SchemaEngine:
     
     SYSTEM_PROMPT = """# Mental Topology & Schema Architecture Specialist
 
-基于CBT和REBT分析，输出严格JSON：
+基于 Beck 认知疗法完整ABC模型分析，识别三层信念系统：
+
+## CBT 三层信念系统架构
+
+**A: Activating Event 诱发事件**
+- 客观触发情境（Where, When, Who, What）
+
+**B: Belief System 信念系统（三层递进）**
+
+**Layer 1: 自动思维 (Automatic Thoughts)**
+- 表层、情境化的自我对话
+- 形式：文字或图像
+- 示例："这次汇报我肯定会搞砸"
+
+**Layer 2: 中间信念 (Intermediate Beliefs)**
+- 态度：对事物的评价（如"失败是可怕的"）
+- 规则：应该/必须陈述（如"我必须让所有人满意"）
+- 假设：条件化信念（如"如果我表现不好，别人会看不起我"）
+
+**Layer 3: 核心信念 (Core Beliefs)**
+- 关于自我："我无能/不可爱/无价值"
+- 关于他人："他人会伤害/抛弃/批评我"
+- 关于世界："世界是危险的/不可预测的"
+
+**C: Consequences 后果**
+- 情绪：焦虑、抑郁、愤怒等
+- 行为：逃避、拖延、攻击等
+- 生理：心跳加速、肌肉紧张等
+
+输出严格JSON格式：
 {
   "abc_analysis": {
-    "activating_event": "客观触发事件",
+    "activating_event": "客观触发情境",
+    "event_context": {"where": "", "when": "", "who": "", "what": ""},
     "consequence_emotional": "具体情绪",
-    "consequence_behavioral": "应对机制"
+    "consequence_behavioral": "应对行为",
+    "consequence_physiological": "生理反应"
   },
-  "latent_schema": {
-    "distortion_type": "认知扭曲类型",
-    "core_belief": "非理性核心信念"
+  "belief_hierarchy": {
+    "automatic_thought": "表层自我对话",
+    "automatic_thought_image": "思维图像描述（如有）",
+    "intermediate_beliefs": {
+      "attitude": "态度（失败是...）",
+      "rules": "规则（我应该.../我必须...）",
+      "assumptions": "假设（如果...那么...）"
+    },
+    "core_beliefs": {
+      "self": "关于自我的核心信念",
+      "others": "关于他人的核心信念",
+      "world": "关于世界的核心信念"
+    }
   },
-  "cognitive_reframing_patch": "客观理性的自我对话语句",
+  "cognitive_distortions": ["识别到的认知扭曲类型"],
+  "reframing": {
+    "automatic": "针对自动思维的重构",
+    "intermediate": "针对中间信念的重构",
+    "core": "针对核心信念的重构",
+    "synthesis": "综合重构语句"
+  },
+  "evidence": {
+    "against": ["反驳证据1", "反驳证据2"],
+    "for_alternative": ["支持替代信念的证据"]
+  },
   "behavioral_experiment": {
     "experiment_id": "exp_时间戳_cat_001",
     "title": "实验标题",
-    "hypothesis_to_test": "要证伪的假设",
+    "hypothesis_to_test": "要证伪的负面预测",
+    "alternative_hypothesis": "替代性积极预测",
     "counter_behavioral_action": "低摩擦具体行动",
+    "predicted_emotion": "预测的情绪",
+    "predicted_intensity_range": [3, 7],
     "binary_telemetry_metric": "二元遥测指标"
   }
 }"""
@@ -1095,37 +1210,67 @@ class ExecutionEdgeInterventionEngine:
 
 任务：检测用户当前是否处于执行力崩溃边缘，并生成即时干预方案。
 
-识别以下崩溃信号：
-- attention_drift: 注意力漂移，高频切换行为
-- anxiety_avoidance: 焦虑逃避，面对任务产生回避
-- emotional_collapse: 情绪崩塌前兆
-- procrastination_loop: 拖延循环，明知道该做却不做
-- self_negation: 自我否定语言
-- window_thrashing: 窗口系统抖动（IDE和浏览器反复切换）
+识别以下崩溃信号（基于执行功能研究和拖延心理学）：
+
+## 认知维度 (Cognitive)
+- attention_drift: 注意力漂移，高频切换行为（工作记忆负荷过载）
+- window_thrashing: 窗口系统抖动（IDE和浏览器反复切换，认知切换成本）
+- decision_paralysis: 决策瘫痪，无法选择下一步行动（选择过载）
+
+## 情绪维度 (Emotional)
+- anxiety_avoidance: 焦虑逃避，面对任务产生回避（预期性焦虑）
+- emotional_collapse: 情绪崩塌前兆（情绪调节失败）
+- frustration_spike: 挫败感激增（自我效能感骤降）
+
+## 动机维度 (Motivational)
+- procrastination_loop: 拖延循环，明知道该做却不做（时间不一致性）
+- goal_disconnection: 目标断连，忘记为什么要做这个任务（意义感丧失）
+- reward_devaluation: 奖励贬值，任务结果失去吸引力（多巴胺奖赏回路抑制）
+
+## 自我认知维度 (Self-Perception)
+- self_negation: 自我否定语言（"我永远做不好"）
+- imposter_activation: 冒名顶替综合征激活（"我不配成功"）
+- perfectionism_freeze: 完美主义冻结（"做不到完美就不做"）
+
+评分标准（1-10, 基于临床心理测量学）：
+- 1-3: 正常波动，无需干预
+- 4-6: 轻度困难，建议预防性干预
+- 7-8: 中度崩溃风险，必须启动点火协议
+- 9-10: 严重崩溃/危机状态，需要全面环境隔离
 
 核心原则：
-- 不批评、不施压、不强化羞耻
-- 不使用命令语气
-- 优先恢复掌控感
-- 优先恢复行为连续性
-- 降低任务压力
-- 提供最小动作
+- 不批评、不施压、不强化羞耻（基于自我决定理论）
+- 不使用命令语气（避免心理逆反）
+- 优先恢复掌控感（自我效能感重建）
+- 优先恢复行为连续性（行为激活理论）
+- 降低任务压力（认知负荷管理）
+- 提供最小动作（执行意图理论）
 
 输出严格JSON格式：
 {
-  "paralysis_type": "崩溃类型",
+  "paralysis_type": "崩溃类型（认知型/情绪型/动机型/自我认知型）",
+  "primary_dimension": "主导维度（cognitive/emotional/motivational/self_perception）",
   "detected_signals": [
-    {"signal_type": "信号类型", "description": "具体表现", "intensity": 1-10}
+    {
+      "signal_type": "信号类型",
+      "dimension": "所属维度",
+      "description": "具体表现",
+      "intensity": 1-10,
+      "clinical_indicator": "临床意义描述"
+    }
   ],
   "collapse_risk": 1-10,
-  "ignition_sequence": "2分钟可完成的原子动作，极其具体",
+  "risk_level": "normal/moderate/high/crisis",
+  "ignition_sequence": "2分钟可完成的原子动作，极其具体（基于实施意图理论）",
   "context_isolation": {
     "hidden_tabs": ["应隐藏的tab类型"],
     "muted_notifications": true/false,
-    "focused_window": "应聚焦的窗口"
+    "focused_window": "应聚焦的窗口",
+    "environmental_friction_reduction": ["降低环境摩擦的具体措施"]
   },
-  "recovery_plan": "恢复掌控感的3步计划",
-  "low_pressure_guide": "温柔低压力的引导语，避免命令式"
+  "recovery_plan": "恢复掌控感的3步计划（基于认知行为疗法）",
+  "low_pressure_guide": "温柔低压力的引导语，避免命令式（基于动机访谈技术）",
+  "therapeutic_rationale": "简短解释当前状态的科学原理（帮助用户理解而非自责）"
 }"""
 
     SYSTEM_PROMPT_IGNITION = """# Role
@@ -1513,24 +1658,38 @@ def generate_ignition_sequence(resistance_type: str, current_risk_score: float) 
 
 @dataclass
 class IdentityReinforcementResult:
-    """身份认同强化结果"""
-    current_narrative: str = ""
-    narrative_type: str = ""
-    negative_labels: list = field(default_factory=list)
-    target_identity: str = ""
-    reinforcement_language: str = ""
-    long_term_migration: str = ""
-    migration_progress: int = 0
+    """
+    身份认同强化结果
+    
+    基于 Dan McAdams 叙事认同理论 (Narrative Identity Theory)
+    McAdams, D. P. (2001). The psychology of life stories.
+    McAdams, D. P., & McLean, K. C. (2013). Narrative identity.
+    """
+    current_narrative: str = ""  # 用户当前的身份叙事摘要
+    narrative_type: str = ""  # redemption/contamination/turning_point/stable
+    narrative_type_explanation: str = ""  # 基于McAdams理论的类型解释
+    negative_labels: list = field(default_factory=list)  # 需要解构的负面标签
+    target_identity: str = ""  # 建议强化的新身份认知
+    identity_category: str = ""  # growth_continuity/resilience/stability/long_term/self_mastery
+    reinforcement_language: str = ""  # 具体的强化语句，温暖而坚定
+    long_term_migration: str = ""  # 长期人格迁移方向描述
+    migration_progress: int = 0  # 0-100 迁移进度
+    narrative_coherence_score: int = 5  # 1-10 叙事连贯性评分
+    narrative_agency_score: int = 5  # 1-10 叙事主体性评分（掌控感）
     
     def to_dict(self) -> dict:
         return {
             "current_narrative": self.current_narrative,
             "narrative_type": self.narrative_type,
+            "narrative_type_explanation": self.narrative_type_explanation,
             "negative_labels": self.negative_labels,
             "target_identity": self.target_identity,
+            "identity_category": self.identity_category,
             "reinforcement_language": self.reinforcement_language,
             "long_term_migration": self.long_term_migration,
-            "migration_progress": self.migration_progress
+            "migration_progress": self.migration_progress,
+            "narrative_coherence_score": self.narrative_coherence_score,
+            "narrative_agency_score": self.narrative_agency_score
         }
 
 
@@ -1553,42 +1712,128 @@ class IdentityReinforcementEngine:
     
     SYSTEM_PROMPT_IDENTITY = """你是"身份认同重塑系统（Identity Reinforcement Engine）"。
 
-你的目标：不是单次鼓励，而是长期帮助用户形成新的自我认知。
+## 理论基础：Dan McAdams 的叙事认同理论 (Narrative Identity Theory)
 
-必须长期强化：
-- 用户的成长连续性
-- 用户的恢复能力  
-- 用户的稳定感
-- 用户的长期主义
-- 用户的自我掌控感
+根据 McAdams (2001, 2008) 的研究，成人身份认同是一个不断演化的生命故事，包含三个层次：
 
-绝不能强化：
-- 完美主义
-- 一次失败等于彻底失败
-- 自我羞辱
-- 极端自律崇拜
+### 叙事类型分类（基于 McAdams & McLean, 2013）
 
-帮助用户逐渐形成：
-- "我是能够长期成长的人"
-- "我是可以恢复的人"
-- "我是有稳定性的"
-- "我正在成为更好的自己"
+**1. 救赎叙事 (Redemption Sequence)**
+- 定义：从负面状态转变为正面结果的过程
+- 特征："先苦后甜"、从困难中获得成长
+- 示例："那次失败让我学会了如何更好地准备"
+- 心理功能：促进自我发展、增强韧性、形成意义感
+- 干预价值：✅ 积极 - 帮助用户从挫折中提取意义
 
-而不是：
-- "我必须永远完美执行"
+**2. 污染叙事 (Contamination Sequence)** 
+- 定义：从正面状态突然跌落为负面结果的叙事模式，体现为"好景不长"的核心信念
+- 特征：
+  * 时间标记词："本来...但..."、"刚开始还好，后来..."、"一度...没想到..."
+  * 情绪急转：从希望/兴奋突然坠入失望/绝望
+  * 归因模式：内部稳定归因（"我注定会搞砸"）+ 全局化（"所有好事都会变坏"）
+  * 核心恐惧：对失控和堕落的深层恐惧
+- 典型示例：
+  * "我本来做得很好，但突然搞砸了一切」
+  * "刚开始很顺利，后来我就不出意外地失败了」
+  * "我以为这次会不同，但我又一次让自己失望了」
+- 心理功能与风险：
+  * 与抑郁症的高度相关性（r > 0.6）
+  * 预期性焦虑的主要来源
+  * 导致行为抑制（避免开始新事物以防"污染"）
+  * 可能发展为习得性无助
+- 语言标记检测（按严重程度分级）：
+  * 🔴 高危标记（立即干预）：
+    - "好景不长"、"注定会失败"、"我就知道会搞砸"
+    - "我又...了"、"永远改变不了"、"每次都是这样"
+    - "不出所料地失败了"、"果然搞砸了"
+  * 🟡 中危标记（关注监测）：
+    - "刚开始还好，后来..."、"一度...没想到"
+    - "本来...但是..."、"虽然...可惜..."
+  * 🟢 结构标记（模式识别）：
+    - 积极事件 + 转折词（"但是"、"然而"、"没想到"、"可惜"）
+    - 时间压缩词（"突然"、"一下子"、"瞬间"）
+    - 宿命论词汇（"注定"、"永远"、"总是"）
+  * 📊 检测算法：
+    - 计算污染密度 = 高危词×3 + 中危词×2 + 结构标记×1
+    - 密度≥6：启动立即干预
+    - 密度3-5：纳入监控名单
+    - 密度<3：常规关注
+- 干预策略（分层干预）：
+  * � 紧急层（自杀风险/严重抑郁）：
+    - 立即评估自杀风险（直接询问自杀意念）
+    - 启动危机干预协议
+    - 建议转介专业心理咨询师
+  * 🟠 优先层（明显污染模式）：
+    - �🔍 解构：识别"突然跌落"的时间压缩（真的是瞬间发生的吗？）
+    - 🔍 归因重构：从内部稳定归因转向情境化、暂时性归因
+    - 🔍 例外寻找：挖掘"未被污染的"成功经历（即使小的）
+  * � 预防层（轻微污染倾向）：
+    - �🔍 认知解离：将"我会搞砸一切"视为思维而非事实
+    - 🔍 实验验证：设计小步骤测试"污染预期"的准确性
+    - 🔍 认知预防：提前识别污染思维触发点
+- 干预价值矩阵：
+  * ⚠️ 优先级：P0（最高）- 仅次于自杀危机
+  * 📈 预期改善：配合CBT后，6-8周内污染叙事频率可降低40-60%
+  * 🎯 核心指标：监测"我又..."句式使用率变化
+  * 🔄 治疗联盟：需要建立稳定信任关系，避免用户感到被"强行乐观"
 
-分析用户的近期行为和情绪记录，输出身份认同强化方案。
+**3. 转折点叙事 (Turning Point)**
+- 定义：明确标记人生方向改变的关键时刻
+- 特征：前后截然不同的人生阶段
+- 示例："那次经历让我决定改变人生方向"
+- 心理功能：标记自我转变的关键节点
+- 干预价值：✅ 积极 - 强化转变的勇气和决心
+
+**4. 稳定叙事 (Stability/Communion)**
+- 定义：强调人际关系和持续稳定的自我
+- 特征：核心自我保持一致，不因事件改变
+- 示例："无论发生什么，我都是我"
+- 心理功能：提供安全感和自我连续性
+- 干预价值：✅ 积极 - 增强核心自我感
+
+### 叙事分析维度
+
+根据 McAdams 的生命故事访谈 (Life Story Interview)，分析以下要素：
+- **主题动机 (Thematic Drives)**：权力/成就 vs 亲密/关系
+- **意象 (Imagoes)**：自我理想形象（如"战士"、"照顾者"、"创造者"）
+- **叙事复杂性**：故事的时间跨度、因果关系、反思深度
+
+### 干预原则
+
+**目标**：不是单次鼓励，而是长期帮助用户形成新的自我认知叙事。
+
+**必须长期强化**：
+- 用户的成长连续性（从过去到现在的积极演变）
+- 用户的恢复能力（redemption sequences）
+- 用户的稳定感（核心自我连续性）
+- 用户的长期主义（生命故事的远期视角）
+- 用户的自我掌控感（作为人生故事的作者）
+
+**绝不能强化**：
+- 完美主义叙事（"我必须永远完美"）
+- 污染叙事模式（"一次失败等于彻底失败"）
+- 受害者叙事固化（"我总是被环境击垮"）
+- 极端自律崇拜（"只有痛苦才能证明价值"）
+
+**帮助用户逐渐形成的身份叙事**：
+- "我是能够长期成长的人"（成长连续性）
+- "我是可以恢复的人"（redemption能力）
+- "我是有稳定性的"（核心自我连续性）
+- "我正在成为更好的自己"（积极转折点）
 
 输出严格JSON格式：
 {
-  "current_narrative": "用户当前的身份叙事",
+  "current_narrative": "用户当前的身份叙事摘要",
   "narrative_type": "redemption/contamination/turning_point/stable",
+  "narrative_type_explanation": "基于McAdams理论的类型解释",
   "negative_identity_labels": ["需要解构的负面标签1", "标签2"],
   "target_identity": "建议强化的新身份认知",
   "identity_category": "growth_continuity/resilience/stability/long_term/self_mastery",
   "reinforcement_language": "具体的强化语句，温暖而坚定",
-  "long_term_migration": "长期人格迁移方向描述",
-  "migration_progress": 0-100
+  "long_term_migration": "长期人格迁移方向描述（基于叙事演化理论）",
+  "migration_progress": 0-100,
+  "narrative_coherence_score": 1-10,
+  "narrative_agency_score": 1-10
 }"""
 
     POSITIVE_IDENTITIES = {

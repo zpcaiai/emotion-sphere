@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS personality_drivers (
     driver_category   VARCHAR(50),  -- perfectionism/catastrophizing/impostor/emotional_reasoning/overgeneralization
     core_belief       TEXT,         -- 核心信念: "If I fail, I am worthless"
     
+    -- 心理动力学补充（基于依恋理论和防御机制）
+    attachment_style  VARCHAR(20),  -- secure/anxious/avoidant/disorganized 依恋风格
+    defense_mechanism VARCHAR(50), -- repression/projection/rationalization/displacement 防御机制
+    emotional_regulation_strategy VARCHAR(50), -- reappraisal/suppression/acceptance/distraction 调节策略
+    
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     analyzed_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -97,16 +102,28 @@ CREATE TABLE IF NOT EXISTS cognitive_schemas (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
     
-    -- ABC 分析
+    -- ABC 分析（基于Ellis的ABC理论）
     schema_name     VARCHAR(100) NOT NULL,
-    distortion_type VARCHAR(50),  -- Perfectionism/Catastrophizing/Impostor_Syndrome/Emotional_Reasoning/Overgeneralization
+    -- 认知扭曲类型（基于Beck的认知疗法分类）
+    distortion_type VARCHAR(50),  -- all_or_nothing/catastrophizing/mind_reading/mental_filtering
+                                  -- discounting_positive/emotional_reasoning/should_statements
+                                  -- labeling/overgeneralization/personalization
     
+    -- A: Activating Event 诱发事件
     activating_event   TEXT,
-    consequence_emotional   TEXT,
-    consequence_behavioral  TEXT,
+    event_context      JSONB,     -- {where, when, who, what}
     
-    -- 核心信念
-    core_belief     TEXT,
+    -- B: Beliefs 信念系统（分层级）
+    automatic_thought  TEXT,     -- 自动化思维
+    intermediate_belief TEXT,    -- 中间信念（态度、规则、假设）
+    core_belief        TEXT,     -- 核心信念（关于自我、他人、世界的根本信念）
+    
+    -- C: Consequences 后果（情绪+行为+生理）
+    consequence_emotional    TEXT,
+    consequence_behavioral   TEXT,
+    consequence_physiological TEXT, -- 生理反应：心跳加速、肌肉紧张等
+    
+    -- 核心信念和早期适应不良图式
     latent_schema   JSONB,        -- {core_need, early_maladaptive_schema, coping_style}
     
     -- 认知重构
@@ -132,19 +149,32 @@ CREATE TABLE IF NOT EXISTS behavioral_experiments (
     user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
     schema_id       UUID REFERENCES cognitive_schemas(id) ON DELETE SET NULL,
     
-    -- 实验定义
+    -- 实验定义（基于Bennett-Levy等行为实验手册）
     experiment_id   VARCHAR(100) UNIQUE,  -- exp_2026_cat_001 格式
     title           VARCHAR(200) NOT NULL,
-    hypothesis_to_test TEXT,      -- 要证伪的假设
+    hypothesis_to_test TEXT,      -- 要证伪的假设（负面预测）
+    alternative_hypothesis TEXT,  -- 替代性假设（积极预测）
     
     -- 实验设计
     counter_behavioral_action TEXT, -- 具体低摩擦行动
     difficulty_level    INTEGER CHECK (difficulty_level BETWEEN 1 AND 5),
     estimated_duration_minutes INTEGER, -- 预计耗时
     
+    -- 实验类型（基于暴露疗法和学习理论）
+    experiment_type     VARCHAR(50), -- hypothesis_testing/exposure/behavioral_activation/skills_practice
+    
+    -- 情绪预测（核心机制）
+    predicted_emotion_before  TEXT,    -- 预测："我会感到焦虑"
+    predicted_intensity_min   INTEGER, -- 预测情绪强度范围（最低）
+    predicted_intensity_max   INTEGER, -- 预测情绪强度范围（最高）
+    
     -- 二元遥测指标
     binary_telemetry_metric TEXT, -- "Did someone scold you? Yes/No"
     success_criteria    JSONB,    -- {metric, threshold, operator}
+    
+    -- 安全行为识别（需要减少的逃避行为）
+    safety_behaviors    TEXT[],   -- 如 ["避免眼神接触", "提前准备借口"]
+    behavioral_goal   TEXT,       -- 具体行为目标（SMART原则）
     
     -- 执行追踪
     status          VARCHAR(20) DEFAULT 'pending', -- pending/in_progress/completed/abandoned
@@ -456,6 +486,81 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS trg_identity_narratives_updated ON identity_narratives;
 CREATE TRIGGER trg_identity_narratives_updated 
 BEFORE UPDATE ON identity_narratives 
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================
+-- 心理学分析结果持久化（L0-L4 多层分析）
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS psychology_analysis_results (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- 分析元数据
+    analysis_type       VARCHAR(50) DEFAULT 'emotion',  -- emotion/behavior/execution
+    input_text          TEXT,
+    intensity           INTEGER CHECK (intensity BETWEEN 1 AND 10),
+    
+    -- L0: 人格驱动
+    l0_driver_category      VARCHAR(50),  -- Perfectionism/Catastrophizing/etc
+    l0_surface_problem      TEXT,
+    l0_deep_emotion         TEXT,
+    l0_core_belief          TEXT,
+    l0_intervention_priority INTEGER CHECK (l0_intervention_priority BETWEEN 1 AND 5),
+    
+    -- L1: 认知图式
+    l1_distortion_type      VARCHAR(50),
+    l1_activating_event     TEXT,
+    l1_core_belief          TEXT,
+    l1_reframing_patch      TEXT,
+    l1_experiment_id        VARCHAR(100),
+    l1_experiment_title     TEXT,
+    l1_experiment_action    TEXT,
+    
+    -- L2: 心理状态
+    l2_state_name           VARCHAR(50),
+    l2_state_level          INTEGER CHECK (l2_state_level BETWEEN 0 AND 4),
+    l2_arousal_level        INTEGER CHECK (l2_arousal_level BETWEEN 1 AND 10),
+    l2_valence_score        INTEGER,
+    l2_recommended_action   TEXT,
+    l2_escalation_protocol  TEXT,
+    
+    -- L3: 身份认同（可选，当有历史数据时）
+    l3_narrative_type       VARCHAR(50),
+    l3_narrative_title      TEXT,
+    l3_coherence_score      INTEGER,
+    l3_agency_score         INTEGER,
+    
+    -- L4: 成长指标（可选）
+    l4_emotional_regulation     INTEGER,
+    l4_cognitive_flexibility    INTEGER,
+    l4_behavioral_activation    INTEGER,
+    l4_interpersonal_effectiveness INTEGER,
+    l4_self_concept_clarity     INTEGER,
+    
+    -- 综合输出
+    synthesis_immediate_action  TEXT,
+    synthesis_core_insight      TEXT,
+    synthesis_risk_level        VARCHAR(20),
+    
+    -- 系统状态
+    is_crisis                   BOOLEAN DEFAULT FALSE,
+    crisis_action               TEXT,
+    
+    -- 时间戳
+    created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_psych_analysis_user ON psychology_analysis_results(user_id);
+CREATE INDEX idx_psych_analysis_time ON psychology_analysis_results(created_at DESC);
+CREATE INDEX idx_psych_analysis_type ON psychology_analysis_results(analysis_type);
+CREATE INDEX idx_psych_analysis_crisis ON psychology_analysis_results(user_id, is_crisis);
+
+-- 触发器自动更新 updated_at
+DROP TRIGGER IF EXISTS trg_psych_analysis_updated ON psychology_analysis_results;
+CREATE TRIGGER trg_psych_analysis_updated 
+BEFORE UPDATE ON psychology_analysis_results 
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
@@ -850,8 +955,13 @@ CREATE TABLE IF NOT EXISTS identity_reinforcement_logs (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
     
-    -- 当前身份叙事
+    -- 当前身份叙事 (基于 Dan McAdams 的叙事认同理论)
     current_narrative   TEXT,       -- "我是能够长期成长的人"
+    -- 叙事类型说明：
+    -- redemption: 救赎叙事 - 从负面经历中获得成长 (如："那次失败后我变得更强大")
+    -- contamination: 污染叙事 - 负面事件持续影响 (需重点关注和干预)
+    -- turning_point: 转折点叙事 - 人生方向改变的关键时刻
+    -- stable: 稳定叙事 - 核心自我保持稳定
     narrative_type      VARCHAR(50), -- redemption/contamination/turning_point/stable
     
     -- 负面身份标签（需要解构的）
@@ -1104,6 +1214,54 @@ CREATE TABLE IF NOT EXISTS dynamic_load_configs (
 CREATE UNIQUE INDEX idx_load_config_user ON dynamic_load_configs(user_id);
 
 -- ============================================================
+-- 心理学分析仪表盘视图
+-- ============================================================
+
+CREATE OR REPLACE VIEW psychology_analysis_dashboard AS
+SELECT 
+    u.id as user_id,
+    
+    -- 分析统计
+    (SELECT COUNT(*) FROM psychology_analysis_results 
+     WHERE user_id = u.id) as total_analyses,
+    
+    (SELECT COUNT(*) FROM psychology_analysis_results 
+     WHERE user_id = u.id AND created_at >= CURRENT_DATE) as today_analyses,
+    
+    (SELECT COUNT(*) FROM psychology_analysis_results 
+     WHERE user_id = u.id AND is_crisis = TRUE) as total_crisis_detected,
+    
+    -- 最近分析
+    (SELECT l0_driver_category FROM psychology_analysis_results 
+     WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as recent_driver,
+    
+    (SELECT l1_distortion_type FROM psychology_analysis_results 
+     WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as recent_distortion,
+    
+    (SELECT l2_state_name FROM psychology_analysis_results 
+     WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as recent_state,
+    
+    (SELECT synthesis_risk_level FROM psychology_analysis_results 
+     WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as recent_risk_level,
+    
+    -- 模式统计（近30天）
+    (SELECT mode() WITHIN GROUP (ORDER BY l0_driver_category) 
+     FROM psychology_analysis_results 
+     WHERE user_id = u.id AND created_at >= CURRENT_DATE - INTERVAL '30 days') as dominant_driver,
+    
+    (SELECT ROUND(AVG(l2_arousal_level), 1) FROM psychology_analysis_results 
+     WHERE user_id = u.id AND created_at >= CURRENT_DATE - INTERVAL '7 days') as avg_arousal_7d,
+    
+    (SELECT ROUND(AVG(intensity), 1) FROM psychology_analysis_results 
+     WHERE user_id = u.id AND created_at >= CURRENT_DATE - INTERVAL '7 days') as avg_intensity_7d,
+    
+    -- 最近一次分析时间
+    (SELECT MAX(created_at) FROM psychology_analysis_results 
+     WHERE user_id = u.id) as last_analysis_at
+
+FROM users u;
+
+-- ============================================================
 -- Personality OS 整合仪表盘
 -- ============================================================
 
@@ -1145,6 +1303,216 @@ SELECT
     )) as behavior_health
 
 FROM users u;
+
+-- ============================================================
+-- 30. 软删除支持 (Soft Delete)
+-- ============================================================
+
+-- 为所有业务表添加软删除字段（使用DO块批量处理）
+DO $$
+DECLARE
+    tables_list TEXT[] := ARRAY[
+        'emotion_logs', 'psychology_analysis_results', 'personal_notes',
+        'behavior_regulation_sessions', 'habit_state_machines', 'habit_tokens',
+        'execution_paralysis_logs', 'micro_scheduler_sessions', 'ignition_logs',
+        'identity_reinforcement_logs', 'identity_deconstruction_logs',
+        'personality_migrations', 'behavioral_experiments', 'cognitive_schemas',
+        'personality_drivers', 'psychological_states', 'data_bus_events'
+    ];
+    tbl TEXT;
+BEGIN
+    FOREACH tbl IN ARRAY tables_list
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE %I ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL;',
+            tbl
+        );
+        EXECUTE format(
+            'ALTER TABLE %I ADD COLUMN IF NOT EXISTS deleted_by INTEGER DEFAULT NULL;',
+            tbl
+        );
+        EXECUTE format(
+            'CREATE INDEX IF NOT EXISTS idx_%s_deleted_at ON %I(deleted_at) WHERE deleted_at IS NULL;',
+            tbl, tbl
+        );
+    END LOOP;
+END $$;
+
+-- ============================================================
+-- 31. 数据版本控制 (Data Versioning)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS data_versions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    table_name      VARCHAR(100) NOT NULL,
+    record_id       UUID NOT NULL,
+    version         INTEGER NOT NULL,
+    data_snapshot   JSONB NOT NULL,      -- 完整数据快照
+    changed_fields  TEXT[],              -- 变更的字段列表
+    change_type     VARCHAR(20),         -- CREATE/UPDATE/DELETE
+    change_reason   VARCHAR(200),        -- 变更原因
+    changed_by      INTEGER REFERENCES users(id),
+    changed_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(table_name, record_id, version)
+);
+
+CREATE INDEX idx_data_versions_record ON data_versions(table_name, record_id, version DESC);
+CREATE INDEX idx_data_versions_changed_at ON data_versions(changed_at DESC);
+
+-- 版本号自动递增触发器函数
+CREATE OR REPLACE FUNCTION increment_version()
+RETURNS TRIGGER AS $$
+DECLARE
+    next_version INTEGER;
+BEGIN
+    SELECT COALESCE(MAX(version), 0) + 1 INTO next_version
+    FROM data_versions
+    WHERE table_name = TG_TABLE_NAME AND record_id = NEW.id;
+    
+    NEW.version := next_version;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- 32. 审计日志表 (Audit Logging)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    table_name      VARCHAR(100) NOT NULL,
+    record_id       UUID,
+    action          VARCHAR(20) NOT NULL,    -- INSERT/UPDATE/DELETE/SELECT
+    old_data        JSONB,
+    new_data        JSONB,
+    changed_fields  TEXT[],                  -- 变更的字段
+    user_id         INTEGER REFERENCES users(id),
+    user_ip         INET,
+    user_agent      TEXT,
+    session_id      VARCHAR(255),
+    request_id      VARCHAR(255),            -- 请求追踪ID
+    executed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_audit_logs_table ON audit_logs(table_name, executed_at DESC);
+CREATE INDEX idx_audit_logs_user ON audit_logs(user_id, executed_at DESC);
+CREATE INDEX idx_audit_logs_record ON audit_logs(record_id, executed_at DESC);
+CREATE INDEX idx_audit_logs_request ON audit_logs(request_id);
+
+-- 审计日志触发器函数
+CREATE OR REPLACE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+DECLARE
+    old_json JSONB;
+    new_json JSONB;
+    changed_fields TEXT[] := ARRAY[]::TEXT[];
+    key TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        old_json := to_jsonb(OLD);
+        
+        INSERT INTO audit_logs (
+            table_name, record_id, action, old_data,
+            user_id, executed_at
+        ) VALUES (
+            TG_TABLE_NAME, OLD.id, 'DELETE', old_json,
+            (current_setting('app.current_user_id', true))::INTEGER,
+            CURRENT_TIMESTAMP
+        );
+        
+        RETURN OLD;
+        
+    ELSIF TG_OP = 'INSERT' THEN
+        new_json := to_jsonb(NEW);
+        
+        INSERT INTO audit_logs (
+            table_name, record_id, action, new_data,
+            user_id, executed_at
+        ) VALUES (
+            TG_TABLE_NAME, NEW.id, 'INSERT', new_json,
+            (current_setting('app.current_user_id', true))::INTEGER,
+            CURRENT_TIMESTAMP
+        );
+        
+        -- 同时创建版本记录
+        INSERT INTO data_versions (
+            table_name, record_id, version, data_snapshot,
+            change_type, changed_by, changed_at
+        ) VALUES (
+            TG_TABLE_NAME, NEW.id, 1, new_json,
+            'CREATE', 
+            (current_setting('app.current_user_id', true))::INTEGER,
+            CURRENT_TIMESTAMP
+        );
+        
+        RETURN NEW;
+        
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_json := to_jsonb(OLD);
+        new_json := to_jsonb(NEW);
+        
+        -- 检测变更的字段
+        FOR key IN SELECT jsonb_object_keys(new_json)
+        LOOP
+            IF old_json->key IS DISTINCT FROM new_json->key THEN
+                changed_fields := array_append(changed_fields, key);
+            END IF;
+        END LOOP;
+        
+        INSERT INTO audit_logs (
+            table_name, record_id, action, old_data, new_data,
+            changed_fields, user_id, executed_at
+        ) VALUES (
+            TG_TABLE_NAME, NEW.id, 'UPDATE', old_json, new_json,
+            changed_fields,
+            (current_setting('app.current_user_id', true))::INTEGER,
+            CURRENT_TIMESTAMP
+        );
+        
+        -- 创建版本记录
+        INSERT INTO data_versions (
+            table_name, record_id, version, data_snapshot,
+            changed_fields, change_type, changed_by, changed_at
+        ) SELECT
+            TG_TABLE_NAME, NEW.id, 
+            COALESCE(MAX(version), 0) + 1,
+            new_json, changed_fields, 'UPDATE',
+            (current_setting('app.current_user_id', true))::INTEGER,
+            CURRENT_TIMESTAMP
+        FROM data_versions
+        WHERE table_name = TG_TABLE_NAME AND record_id = NEW.id;
+        
+        RETURN NEW;
+    END IF;
+    
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 为关键表启用审计日志（示例：emotion_logs）
+CREATE TRIGGER emotion_logs_audit
+    AFTER INSERT OR UPDATE OR DELETE ON emotion_logs
+    FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+
+-- ============================================================
+-- 33. 数据归档表 (Data Archiving for GDPR)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS archived_data (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    original_table  VARCHAR(100) NOT NULL,
+    original_id     UUID NOT NULL,
+    user_id         INTEGER REFERENCES users(id),
+    data_payload    JSONB NOT NULL,
+    archived_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    archive_reason  VARCHAR(100),           -- USER_REQUEST/SYSTEM/RETENTION
+    retention_until TIMESTAMP,              -- 数据保留截止日期
+    anonymized      BOOLEAN DEFAULT FALSE -- 是否已匿名化
+);
+
+CREATE INDEX idx_archived_data_user ON archived_data(user_id, archived_at DESC);
+CREATE INDEX idx_archived_data_retention ON archived_data(retention_until) WHERE retention_until IS NOT NULL;
 
 -- ============================================================
 -- 初始化说明

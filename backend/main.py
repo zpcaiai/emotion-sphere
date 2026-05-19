@@ -1,6 +1,8 @@
 """
 backend/main.py — 情感星球 FastAPI 后端
 包含认证（/api/auth/*）及核心查询接口
+
+API版本: v1.0.0
 """
 
 import asyncio
@@ -8,14 +10,27 @@ import json
 import os
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
+from typing import Optional, Any, Dict, List, Union
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+
+# ── API限流 ───────────────────────────────────────────────────
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    limiter = Limiter(key_func=get_remote_address)
+except ImportError:
+    limiter = None
+    print('[warning] slowapi not installed, rate limiting disabled')
 
 # ── 路径配置 ──────────────────────────────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -280,9 +295,89 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# ── 标准化API响应模型 ─────────────────────────────────────────
+
+class ApiMetadata(BaseModel):
+    """API响应元数据"""
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    request_id: Optional[str] = None
+    version: str = "1.0.0"
+    pagination: Optional[Dict[str, Any]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "timestamp": "2026-01-15T10:30:00",
+                "version": "1.0.0",
+                "pagination": {"page": 1, "per_page": 20, "total": 100}
+            }
+        }
+
+class ApiResponse(BaseModel):
+    """统一API响应格式"""
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[Any] = None
+    meta: ApiMetadata = Field(default_factory=ApiMetadata)
+    error: Optional[Dict[str, Any]] = None
+    
+    @validator('error', always=True)
+    def validate_error_on_failure(cls, v, values):
+        if not values.get('success') and not v:
+            return {"code": "UNKNOWN_ERROR", "message": "An unknown error occurred"}
+        return v
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Operation completed successfully",
+                "data": {"id": 123, "name": "example"},
+                "meta": {
+                    "timestamp": "2026-01-15T10:30:00",
+                    "version": "1.0.0"
+                }
+            }
+        }
+
+class ApiErrorResponse(BaseModel):
+    """API错误响应格式"""
+    success: bool = False
+    error: Dict[str, Any] = Field(..., description="错误详情")
+    meta: ApiMetadata = Field(default_factory=ApiMetadata)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Invalid input data",
+                    "details": {"field": "email", "issue": "Invalid format"}
+                },
+                "meta": {
+                    "timestamp": "2026-01-15T10:30:00",
+                    "version": "1.0.0"
+                }
+            }
+        }
+
 # ── FastAPI 应用 ───────────────────────────────────────────────
 
-app = FastAPI(title='Emotion Sphere API', lifespan=lifespan)
+app = FastAPI(
+    title='Emotion Sphere API',
+    description='心理学引擎API - 支持人格塑造、习惯养成、执行力三大子系统',
+    version='1.0.0',
+    docs_url='/api/v1/docs',
+    redoc_url='/api/v1/redoc',
+    openapi_url='/api/v1/openapi.json',
+    lifespan=lifespan
+)
+
+# 注册限流错误处理器
+if limiter:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*').split(',')
@@ -1189,6 +1284,49 @@ def psychology_analyze(payload: PsychologyAnalyzeRequest, request: Request):
                         )
                     )
                     log_id = cur.fetchone()[0]
+                    
+                    # 保存详细心理学分析结果到 L0-L4 结果表
+                    try:
+                        layers = result.get('layers', {})
+                        l0 = layers.get('L0_causal', {}).get('personality_driver', {})
+                        l1_schema = layers.get('L1_regulation', {}).get('cognitive_schema', {})
+                        l1_exp = layers.get('L1_regulation', {}).get('behavioral_experiment', {})
+                        l2 = layers.get('L2_execution', {}).get('current_state', {})
+                        l3 = layers.get('L3_identity', {}).get('identity_narrative', {}) or {}
+                        l4 = layers.get('L4_memory', {}).get('growth_metrics', {}) or {}
+                        synthesis = result.get('synthesis', {})
+                        
+                        cur.execute(
+                            '''INSERT INTO psychology_analysis_results 
+                               (user_id, analysis_type, input_text, intensity,
+                                l0_driver_category, l0_core_belief, l0_intervention_priority,
+                                l1_distortion_type, l1_core_belief, l1_reframing_patch,
+                                l1_experiment_title, l1_experiment_action,
+                                l2_state_name, l2_state_level, l2_arousal_level,
+                                l2_recommended_action,
+                                l3_narrative_type, l3_coherence_score,
+                                synthesis_immediate_action, synthesis_core_insight, synthesis_risk_level,
+                                is_crisis)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                       %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               RETURNING id''',
+                            (user_id, 'emotion', payload.text, payload.intensity,
+                             l0.get('driver_category'), l0.get('core_belief'), l0.get('intervention_priority'),
+                             l1_schema.get('distortion_type'), l1_schema.get('core_belief'),
+                             l1_schema.get('cognitive_reframing_patch'),
+                             l1_exp.get('title'), l1_exp.get('counter_behavioral_action'),
+                             l2.get('state_name'), l2.get('state_level'), l2.get('arousal_level'),
+                             l2.get('recommended_action'),
+                             l3.get('narrative_type'), l3.get('coherence_score'),
+                             synthesis.get('immediate_action'), synthesis.get('core_insight'),
+                             synthesis.get('risk_level'),
+                             l2.get('state_name') == 'CRISIS')
+                        )
+                        analysis_id = cur.fetchone()[0]
+                        result['saved_analysis_id'] = analysis_id
+                    except Exception as e2:
+                        print(f'[psychology] Failed to save detailed analysis: {e2}', flush=True)
+                    
                     conn.commit()
                     result['saved_log_id'] = log_id
                 _release_db(conn)
@@ -2286,8 +2424,70 @@ def identity_reinforce(payload: IdentityReinforcementRequest, request: Request):
                          result.get('long_term_migration'), result.get('migration_progress', 50))
                     )
                     row = cur.fetchone()
+                    reinforcement_id = str(row[0])
+                    
+                    # 更新或创建人格迁移记录
+                    try:
+                        cur.execute(
+                            '''SELECT id FROM personality_migrations 
+                               WHERE user_id = %s AND migration_dimension = %s 
+                               AND migration_status = 'in_progress'
+                               ORDER BY started_at DESC LIMIT 1''',
+                            (user_id, result.get('identity_category', 'growth_continuity'))
+                        )
+                        existing = cur.fetchone()
+                        
+                        if existing:
+                            # 更新现有迁移进度
+                            cur.execute(
+                                '''UPDATE personality_migrations 
+                                   SET progress_percentage = %s,
+                                       supporting_evidence = array_append(supporting_evidence, %s::jsonb),
+                                       current_stage = CASE WHEN %s >= 80 THEN 3 
+                                                           WHEN %s >= 50 THEN 2 
+                                                           ELSE 1 END
+                                   WHERE id = %s''',
+                                (result.get('migration_progress', 50),
+                                 json.dumps({
+                                     'event_type': 'identity_reinforcement',
+                                     'description': result.get('reinforcement_language', '')[:100],
+                                     'impact_score': min(10, result.get('migration_progress', 50) // 10),
+                                     'reinforcement_id': reinforcement_id
+                                 }),
+                                 result.get('migration_progress', 50),
+                                 result.get('migration_progress', 50),
+                                 existing[0])
+                            )
+                        else:
+                            # 创建新的迁移记录
+                            cur.execute(
+                                '''INSERT INTO personality_migrations 
+                                   (user_id, migration_dimension, starting_identity, target_identity,
+                                    migration_path, current_stage, supporting_evidence, 
+                                    progress_percentage, estimated_completion)
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 
+                                           CURRENT_TIMESTAMP + INTERVAL '90 days')''',
+                                (user_id, result.get('identity_category', 'growth_continuity'),
+                                 result.get('current_narrative', '')[:200],
+                                 result.get('target_identity', '')[:200],
+                                 json.dumps([{
+                                     'stage': 1,
+                                     'milestone': '身份强化开始',
+                                     'achieved_at': 'NOW()'
+                                 }]),
+                                 1,
+                                 json.dumps([{
+                                     'event_type': 'migration_started',
+                                     'description': result.get('long_term_migration', '')[:100],
+                                     'impact_score': 5
+                                 }]),
+                                 result.get('migration_progress', 50))
+                            )
+                    except Exception as e2:
+                        print(f'[identity] Failed to update migration: {e2}', flush=True)
+                    
                     conn.commit()
-                    result['saved_id'] = str(row[0])
+                    result['saved_id'] = reinforcement_id
                 _release_db(conn)
             except Exception as e:
                 print(f'[identity] Failed to save: {e}', flush=True)
@@ -2322,6 +2522,75 @@ def deconstruct_label(payload: DeconstructLabelRequest, request: Request):
             'counter_evidence': ['你曾成功完成过任务', '你在这个平台上寻求帮助'],
             'reframed_identity': '我是一个在特定条件下会放慢节奏的人'
         }
+
+
+@app.get('/api/identity/migrations')
+def personality_migrations(request: Request):
+    """
+    人格迁移进度追踪
+    
+    查询用户正在进行和已完成的人格迁移
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            # 获取所有迁移记录
+            cur.execute(
+                '''SELECT id, migration_dimension, starting_identity, target_identity,
+                          migration_status, progress_percentage, current_stage,
+                          migration_path, supporting_evidence, started_at, estimated_completion, achieved_at
+                   FROM personality_migrations
+                   WHERE user_id = %s
+                   ORDER BY started_at DESC''',
+                (user_id,)
+            )
+            rows = cur.fetchall()
+            
+            migrations = []
+            for row in rows:
+                migrations.append({
+                    'id': str(row[0]),
+                    'migration_dimension': row[1],
+                    'starting_identity': row[2],
+                    'target_identity': row[3],
+                    'status': row[4],
+                    'progress_percentage': row[5],
+                    'current_stage': row[6],
+                    'migration_path': row[7] or [],
+                    'supporting_evidence': row[8] or [],
+                    'started_at': row[9].isoformat() if row[9] else None,
+                    'estimated_completion': row[10].isoformat() if row[10] else None,
+                    'achieved_at': row[11].isoformat() if row[11] else None
+                })
+            
+            # 统计汇总
+            cur.execute(
+                '''SELECT 
+                      COUNT(*) FILTER (WHERE migration_status = 'in_progress') as active,
+                      COUNT(*) FILTER (WHERE migration_status = 'completed') as completed,
+                      COUNT(*) FILTER (WHERE migration_status = 'paused') as paused,
+                      ROUND(AVG(progress_percentage), 1) as avg_progress
+                   FROM personality_migrations
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            stats = cur.fetchone()
+            
+            return {
+                'migrations': migrations,
+                'summary': {
+                    'total': len(migrations),
+                    'active': stats[0] or 0,
+                    'completed': stats[1] or 0,
+                    'paused': stats[2] or 0,
+                    'avg_progress': stats[3] or 0
+                }
+            }
+    finally:
+        _release_db(conn)
 
 
 @app.get('/api/identity/dashboard')
@@ -2428,6 +2697,26 @@ def report_telemetry(payload: TelemetryReportRequest, request: Request):
             subsystem=payload.subsystem,
             telemetry_data=payload.telemetry_data
         )
+        
+        # 持久化信号到 data_bus_events 表
+        if signals:
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    for sig in signals:
+                        payload_json = json.dumps({**sig.get('payload', {}), 'user_id': user_id})
+                        cur.execute(
+                            '''INSERT INTO data_bus_events 
+                               (event_type, event_source, event_target, event_payload, priority)
+                               VALUES (%s, %s, %s, %s, %s)''',
+                            (sig.get('event_type'), sig.get('source'), 
+                             sig.get('target'), payload_json, sig.get('priority', 5))
+                        )
+                conn.commit()
+            except Exception as e:
+                print(f'[telemetry] Failed to persist signals: {e}', flush=True)
+            finally:
+                _release_db(conn)
         
         return {
             'ok': True,
