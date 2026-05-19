@@ -1058,3 +1058,78 @@ export async function completeBehavioralExperiment(expId, outcome, reflection, t
   console.log(`[api] completeBehavioralExperiment ok=${data.success}`)
   return data
 }
+
+// ── 执行力干预系统 API ───────────────────────────────────
+
+export async function detectExecutionCrash(telemetry, token) {
+  console.log(`[api] detectExecutionCrash`)
+  const response = await fetch(`${API_BASE}/execution/crash-detect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({
+      task_attempts: telemetry.task_attempts || 0,
+      escape_urges: telemetry.escape_urges || 0,
+      last_session_minutes: telemetry.last_session_minutes || 0
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] detectExecutionCrash detected=${data.detected} risk=${data.risk_score}`)
+  return data
+}
+
+export async function generateIgnitionSequence(resistance, riskScore, token) {
+  console.log(`[api] generateIgnitionSequence resistance=${resistance}`)
+  const response = await fetch(`${API_BASE}/execution/ignite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({
+      resistance_type: resistance,
+      current_risk_score: riskScore || 0.5
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] generateIgnitionSequence steps=${data.steps?.length}`)
+  return data
+}
+
+export async function fetchMicroMomentum(token) {
+  console.log(`[api] fetchMicroMomentum`)
+  const response = await fetch(`${API_BASE}/execution/micro-momentum`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] fetchMicroMomentum score=${data.momentum_score}`)
+  return data
+}
+
+export async function completeMicroSession(sessionId, outcome, reflection, token) {
+  console.log(`[api] completeMicroSession ${sessionId}`)
+  const response = await fetch(`${API_BASE}/execution/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({
+      session_id: sessionId,
+      outcome,
+      reflection
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  console.log(`[api] completeMicroSession ok=${data.success}`)
+  return data
+}

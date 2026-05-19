@@ -9,6 +9,7 @@ import { EmotionSphereScene } from './EmotionSphereScene'
 import LoginScreen from './LoginScreen'
 import StoryCard from './StoryCard'
 import PsychologyPanel from './PsychologyPanel'
+import ExecutionPanel from './ExecutionPanel'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -140,6 +141,7 @@ export default function EmotionSphereTab() {
   const [visitStats, setVisitStats] = useState({ page_views: 0, unique_visitors: 0 })
   const [storyEmotion, setStoryEmotion] = useState(null)
   const [showPsychology, setShowPsychology] = useState(false)
+  const [showExecution, setShowExecution] = useState(false)
         
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
@@ -1269,6 +1271,10 @@ export default function EmotionSphereTab() {
                           onClick={() => setShowPsychology(true)}>
                     🧠 心理学分析
                   </button>
+                  <button className="segment execution-btn" type="button"
+                          onClick={() => setShowExecution(true)}>
+                    ⚡ 执行力
+                  </button>
                 </div>
               </section>
               <section className="mobile-card glass stats-gradient">
@@ -1304,6 +1310,19 @@ export default function EmotionSphereTab() {
               ✕ 关闭
             </button>
             <PsychologyPanel />
+          </div>
+        </div>
+      )}
+      {showExecution && (
+        <div className="psychology-overlay">
+          <div className="psychology-modal">
+            <button 
+              className="close-psychology-btn"
+              onClick={() => setShowExecution(false)}
+            >
+              ✕ 关闭
+            </button>
+            <ExecutionPanel />
           </div>
         </div>
       )}

@@ -3765,3 +3765,13 @@ canvas {
 .psychology-btn:hover {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.5) 0%, rgba(118, 75, 162, 0.5) 100%);
 }
+
+.execution-btn {
+  background: linear-gradient(135deg, rgba(255, 149, 0, 0.3) 0%, rgba(255, 107, 53, 0.3) 100%);
+  color: #ff9500;
+  border-color: rgba(255, 149, 0, 0.3);
+}
+
+.execution-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 149, 0, 0.5) 0%, rgba(255, 107, 53, 0.5) 100%);
+}

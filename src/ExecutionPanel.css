@@ -1,0 +1,642 @@
+/* Execution Panel Styles */
+
+.exec-panel {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  border-left: 4px solid #ff9500;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.panel-icon {
+  font-size: 20px;
+}
+
+/* Crash Detection Panel */
+.crash-panel {
+  border-left-color: #ff3b30;
+}
+
+.telemetry-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+}
+
+.telemetry-row label {
+  font-size: 14px;
+  color: rgba(255,255,255,0.7);
+}
+
+.telemetry-row input {
+  width: 80px;
+  padding: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+}
+
+.detect-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #ff3b30 0%, #ff6b35 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.detect-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255,59,48,0.4);
+}
+
+.detect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.crash-result {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+}
+
+.risk-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.risk-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.risk-label {
+  font-size: 14px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 4px;
+}
+
+.crash-alert {
+  background: rgba(255,59,48,0.15);
+  border: 1px solid rgba(255,59,48,0.3);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.alert-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ff3b30;
+  margin-bottom: 12px;
+}
+
+.alert-icon {
+  font-size: 20px;
+}
+
+.alert-details p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: rgba(255,255,255,0.8);
+}
+
+.escalation-warning {
+  color: #ffcc00;
+  font-weight: 600;
+}
+
+.circuit-breaker {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.circuit-breaker h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+}
+
+.circuit-breaker ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.circuit-breaker li {
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 6px;
+}
+
+.status-ok {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(52,199,89,0.15);
+  border: 1px solid rgba(52,199,89,0.3);
+  border-radius: 8px;
+  color: #34c759;
+  font-size: 15px;
+}
+
+.ok-icon {
+  font-size: 20px;
+}
+
+.last-check {
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  text-align: center;
+}
+
+/* Ignition Panel */
+.ignition-panel {
+  border-left-color: #ff9500;
+}
+
+.ignition-intro {
+  text-align: center;
+  padding: 20px;
+}
+
+.ignition-intro p {
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.generate-btn {
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b35 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.generate-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255,149,0,0.4);
+}
+
+.session-id {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  font-family: monospace;
+}
+
+.sequence-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff9500 0%, #ff6b35 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-item {
+  padding: 16px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  border-left: 3px solid rgba(255,255,255,0.2);
+  transition: all 0.2s;
+}
+
+.step-item.completed {
+  border-left-color: #34c759;
+  opacity: 0.7;
+}
+
+.step-item.current {
+  border-left-color: #ff9500;
+  background: rgba(255,149,0,0.1);
+}
+
+.step-item.pending {
+  opacity: 0.6;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.step-icon {
+  font-size: 20px;
+}
+
+.step-number {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.step-title {
+  flex: 1;
+  font-size: 15px;
+  color: #fff;
+}
+
+.step-duration {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+}
+
+.step-instruction {
+  margin: 0 0 16px 0;
+  padding: 12px;
+  background: rgba(255,149,0,0.1);
+  border-radius: 6px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.9);
+  line-height: 1.5;
+}
+
+.step-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.success-btn, .fail-btn, .start-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.success-btn {
+  background: linear-gradient(135deg, #34c759 0%, #30d158 100%);
+  color: #fff;
+}
+
+.fail-btn {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+}
+
+.start-btn {
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b35 100%);
+  color: #fff;
+}
+
+.start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.step-completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(52,199,89,0.2);
+  color: #34c759;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sequence-complete {
+  text-align: center;
+  padding: 30px 20px;
+  margin-top: 20px;
+  background: linear-gradient(135deg, rgba(52,199,89,0.1) 0%, rgba(48,209,88,0.1) 100%);
+  border: 1px solid rgba(52,199,89,0.3);
+  border-radius: 12px;
+}
+
+.complete-icon {
+  font-size: 40px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.sequence-complete p {
+  color: #34c759;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.new-sequence-btn {
+  padding: 12px 24px;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-sequence-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* Micro Momentum Panel */
+.momentum-panel {
+  border-left-color: #34c759;
+}
+
+.momentum-score-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.score-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.score-value {
+  font-size: 42px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.score-max {
+  font-size: 16px;
+  color: rgba(255,255,255,0.5);
+}
+
+.level-badge {
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.momentum-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+}
+
+.stat-item label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 8px;
+}
+
+.stat-item span {
+  font-size: 24px;
+  font-weight: 700;
+  color: #34c759;
+}
+
+.velocity-indicator {
+  padding: 16px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.velocity-indicator label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 10px;
+}
+
+.velocity-bar {
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.velocity-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.velocity-value {
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+}
+
+.session-history {
+  margin-bottom: 20px;
+}
+
+.session-history h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: rgba(255,255,255,0.7);
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.session-time {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  font-family: monospace;
+}
+
+.session-duration {
+  flex: 1;
+  font-size: 14px;
+  color: rgba(255,255,255,0.8);
+}
+
+.session-status {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+}
+
+.session-status.success {
+  background: rgba(52,199,89,0.2);
+  color: #34c759;
+}
+
+.session-status.fail {
+  background: rgba(255,59,48,0.2);
+  color: #ff3b30;
+}
+
+.refresh-btn {
+  width: 100%;
+  padding: 12px;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.8);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.2);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Execution Container */
+.execution-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.execution-header {
+  text-align: center;
+  padding: 24px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 20px;
+}
+
+.execution-header h2 {
+  font-size: 22px;
+  margin: 0 0 8px 0;
+  color: #fff;
+}
+
+.execution-header p {
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .momentum-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .step-controls {
+    flex-direction: column;
+  }
+  
+  .telemetry-row {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .telemetry-row input {
+    width: 100%;
+  }
+}
