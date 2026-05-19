@@ -1881,6 +1881,340 @@ def active_micro_sessions(request: Request):
         _release_db(conn)
 
 
+# ── 执行力系统 - 前端兼容API端点 ─────────────────────────────
+
+class CrashDetectRequest(BaseModel):
+    task_attempts: int = Field(default=0, ge=0)
+    escape_urges: int = Field(default=0, ge=0)
+    last_session_minutes: int = Field(default=0, ge=0)
+
+
+class IgniteRequest(BaseModel):
+    resistance_type: str = Field(default='拖延')
+    current_risk_score: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class CompleteSessionRequest(BaseModel):
+    session_id: str = Field(min_length=1)
+    outcome: dict = Field(default_factory=dict)
+    reflection: str = Field(default='')
+
+
+@app.post('/api/execution/crash-detect')
+def crash_detect(payload: CrashDetectRequest, request: Request):
+    """
+    崩溃检测 - 前端兼容端点
+    基于遥测数据检测执行力崩溃风险
+    """
+    try:
+        from backend.psychology_engine import detect_execution_paralysis, calculate_micro_momentum
+        
+        # 基于遥测计算风险分数
+        telemetry = {
+            'task_attempts': payload.task_attempts,
+            'escape_urges': payload.escape_urges,
+            'last_session_minutes': payload.last_session_minutes
+        }
+        
+        # 风险评分算法
+        risk_score = min(1.0, (
+            (payload.escape_urges * 0.15) + 
+            (max(0, 3 - payload.last_session_minutes) * 0.1) +
+            (max(0, payload.task_attempts - 5) * 0.05)
+        ))
+        
+        detected = risk_score >= 0.4
+        
+        # 检测到的崩溃模式
+        crash_pattern = None
+        core_resistance = None
+        if detected:
+            if payload.escape_urges >= 3:
+                crash_pattern = '频繁逃避冲动'
+                core_resistance = '焦虑回避'
+            elif payload.last_session_minutes < 5:
+                crash_pattern = '无法启动专注'
+                core_resistance = '启动困难'
+            elif payload.task_attempts >= 10:
+                crash_pattern = '反复尝试失败'
+                core_resistance = '完美主义瘫痪'
+            else:
+                crash_pattern = '一般性执行崩溃'
+                core_resistance = '未知阻力'
+        
+        result = {
+            'detected': detected,
+            'risk_score': round(risk_score, 2),
+            'crash_pattern': crash_pattern,
+            'core_resistance': core_resistance,
+            'escalation_needed': risk_score >= 0.7,
+            'circuit_breaker_recommendations': [
+                '暂停当前任务，进行5次深呼吸',
+                '切换到2分钟微任务',
+                '降低任务难度至当前能量可承受范围'
+            ] if detected else [],
+            'telemetry': telemetry
+        }
+        
+        # 如果检测到崩溃，记录到数据库
+        if detected:
+            user = _optional_user(request)
+            if user:
+                try:
+                    conn = _get_db()
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            '''INSERT INTO execution_paralysis_logs 
+                               (user_id, paralysis_type, detected_signals, intervention_triggered)
+                               VALUES (%s, %s, %s, TRUE)
+                               RETURNING id''',
+                            (user['id'], crash_pattern, json.dumps(telemetry))
+                        )
+                        row = cur.fetchone()
+                        conn.commit()
+                        result['log_id'] = str(row[0])
+                    _release_db(conn)
+                except Exception as e:
+                    print(f'[crash_detect] Failed to log: {e}', flush=True)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[crash_detect] Failed: {exc}', flush=True)
+        return {
+            'detected': False,
+            'risk_score': 0.5,
+            'crash_pattern': None,
+            'core_resistance': None,
+            'error': str(exc)
+        }
+
+
+@app.post('/api/execution/ignite')
+def ignite_sequence(payload: IgniteRequest, request: Request):
+    """
+    生成点火序列 - 前端兼容端点
+    根据阻力类型和风险分数生成2分钟恢复序列
+    """
+    try:
+        from backend.psychology_engine import generate_ignition_sequence
+        
+        # 生成点火序列
+        sequence_data = generate_ignition_sequence(
+            resistance_type=payload.resistance_type,
+            current_risk_score=payload.current_risk_score
+        )
+        
+        # 创建会话ID
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        user = _optional_user(request)
+        user_id = user['id'] if user else None
+        
+        # 保存会话到数据库
+        if user_id:
+            try:
+                conn = _get_db()
+                with conn.cursor() as cur:
+                    cur.execute(
+                        '''INSERT INTO micro_scheduler_sessions
+                           (user_id, session_type, original_task, decoupled_chain, 
+                            total_steps, micro_momentum_score, session_status)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)
+                           RETURNING id''',
+                        (user_id, 'ignition', f'点火恢复: {payload.resistance_type}',
+                         json.dumps(sequence_data.get('steps', [])),
+                         len(sequence_data.get('steps', [])),
+                         max(20, int((1 - payload.current_risk_score) * 100)),
+                         'active')
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    session_id = str(row[0])
+                _release_db(conn)
+            except Exception as e:
+                print(f'[ignite] Failed to save session: {e}', flush=True)
+        
+        return {
+            'session_id': session_id,
+            'steps': sequence_data.get('steps', []),
+            'resistance_type': payload.resistance_type,
+            'estimated_total_duration': sum(s.get('duration_seconds', 120) for s in sequence_data.get('steps', []))
+        }
+        
+    except Exception as exc:
+        print(f'[ignite] Failed: {exc}', flush=True)
+        # 返回默认点火序列
+        return {
+            'session_id': 'fallback-' + str(uuid.uuid4())[:8],
+            'steps': [
+                {'step_id': '1', 'step_type': 'GROUNDING', 'title': '深呼吸', 'instruction': '进行3次深呼吸，每次吸气4秒，呼气6秒', 'duration_seconds': 60},
+                {'step_id': '2', 'step_type': 'TWO_MINUTE_START', 'title': '2分钟启动', 'instruction': '设置计时器2分钟，开始任务的最小版本', 'duration_seconds': 120},
+                {'step_id': '3', 'step_type': 'REWARD', 'title': '自我肯定', 'instruction': '完成！认可自己的努力，无论结果如何', 'duration_seconds': 30}
+            ],
+            'resistance_type': payload.resistance_type,
+            'estimated_total_duration': 210
+        }
+
+
+@app.get('/api/execution/micro-momentum')
+def get_micro_momentum(request: Request):
+    """
+    获取微动量数据 - 前端兼容端点
+    """
+    user = _optional_user(request)
+    user_id = user['id'] if user else None
+    
+    try:
+        if user_id:
+            conn = _get_db()
+            try:
+                with conn.cursor() as cur:
+                    # 获取今日会话统计
+                    cur.execute(
+                        '''SELECT COUNT(*), 
+                                  COUNT(*) FILTER (WHERE steps_completed > 0),
+                                  AVG(micro_momentum_score)
+                           FROM micro_scheduler_sessions
+                           WHERE user_id = %s 
+                             AND started_at >= CURRENT_DATE
+                             AND session_status != 'cancelled' ''',
+                        (user_id,)
+                    )
+                    row = cur.fetchone()
+                    total_today = row[0] or 0
+                    completed_today = row[1] or 0
+                    avg_momentum = row[2] or 50
+                    
+                    # 获取最近会话历史
+                    cur.execute(
+                        '''SELECT id, original_task, steps_completed, total_steps,
+                                  micro_momentum_score, started_at, session_status
+                           FROM micro_scheduler_sessions
+                           WHERE user_id = %s
+                           ORDER BY started_at DESC
+                           LIMIT 10''',
+                        (user_id,)
+                    )
+                    history = [{
+                        'session_id': str(r[0]),
+                        'task': r[1],
+                        'completed_steps': r[2] or 0,
+                        'total_steps': r[3] or 1,
+                        'momentum_score': r[4] or 50,
+                        'started_at': r[5].isoformat() if r[5] else None,
+                        'completed': r[6] == 'completed'
+                    } for r in cur.fetchall()]
+                    
+                    # 计算动量等级 (1-5)
+                    momentum_score = int(avg_momentum)
+                    if momentum_score >= 80:
+                        momentum_level = 5
+                    elif momentum_score >= 60:
+                        momentum_level = 4
+                    elif momentum_score >= 40:
+                        momentum_level = 3
+                    elif momentum_score >= 20:
+                        momentum_level = 2
+                    else:
+                        momentum_level = 1
+                    
+                    return {
+                        'momentum_score': momentum_score,
+                        'momentum_level': momentum_level,
+                        'sessions_completed_today': completed_today,
+                        'streak_days': 0,  # 可扩展计算
+                        'total_focus_minutes': completed_today * 2,  # 估算
+                        'velocity': (completed_today / max(total_today, 1) - 0.5) * 2,  # -1 到 1
+                        'session_history': history
+                    }
+            finally:
+                _release_db(conn)
+        
+        # 未登录用户返回默认值
+        return {
+            'momentum_score': 50,
+            'momentum_level': 3,
+            'sessions_completed_today': 0,
+            'streak_days': 0,
+            'total_focus_minutes': 0,
+            'velocity': 0,
+            'session_history': []
+        }
+        
+    except Exception as exc:
+        print(f'[micro_momentum] Failed: {exc}', flush=True)
+        return {
+            'momentum_score': 50,
+            'momentum_level': 3,
+            'sessions_completed_today': 0,
+            'streak_days': 0,
+            'total_focus_minutes': 0,
+            'velocity': 0,
+            'session_history': []
+        }
+
+
+@app.post('/api/execution/complete')
+def complete_session(payload: CompleteSessionRequest, request: Request):
+    """
+    完成微会话 - 前端兼容端点
+    """
+    user = _optional_user(request)
+    user_id = user['id'] if user else None
+    
+    try:
+        success = payload.outcome.get('completed', False)
+        actual_duration = payload.outcome.get('actual_duration_minutes', 2)
+        
+        if user_id:
+            conn = _get_db()
+            try:
+                with conn.cursor() as cur:
+                    # 更新会话状态
+                    cur.execute(
+                        '''UPDATE micro_scheduler_sessions
+                           SET session_status = %s,
+                               steps_completed = %s,
+                               micro_momentum_score = %s,
+                               completed_at = NOW()
+                           WHERE id = %s AND user_id = %s
+                           RETURNING id''',
+                        ('completed' if success else 'abandoned',
+                         payload.outcome.get('steps_completed', 0),
+                         70 if success else 30,
+                         payload.session_id, user_id)
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    
+                    if row:
+                        return {
+                            'success': True,
+                            'session_id': payload.session_id,
+                            'completed': success,
+                            'momentum_delta': 10 if success else -5
+                        }
+            finally:
+                _release_db(conn)
+        
+        return {
+            'success': True,
+            'session_id': payload.session_id,
+            'completed': success,
+            'momentum_delta': 10 if success else -5,
+            'note': 'Not logged in, session not persisted'
+        }
+        
+    except Exception as exc:
+        print(f'[complete_session] Failed: {exc}', flush=True)
+        return {
+            'success': False,
+            'error': str(exc)
+        }
+
+
 # ── 子系统四：身份认同重塑 API ────────────────────────────────
 
 class IdentityReinforcementRequest(BaseModel):

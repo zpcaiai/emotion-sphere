@@ -1456,6 +1456,57 @@ def calculate_micro_momentum(completed: int, total: int, avg_time: float) -> dic
     }
 
 
+def generate_ignition_sequence(resistance_type: str, current_risk_score: float) -> dict:
+    """
+    生成点火序列 - 根据阻力类型和风险分数生成2分钟恢复序列
+    
+    Args:
+        resistance_type: 阻力类型 (拖延, 焦虑回避, 启动困难, 完美主义瘫痪)
+        current_risk_score: 当前风险分数 (0-1)
+        
+    Returns:
+        包含 steps 的字典
+    """
+    # 根据阻力类型定制点火序列
+    sequences = {
+        "拖延": [
+            {"step_id": "1", "step_type": "GROUNDING", "title": "接地", "instruction": "停下所有动作，进行3次深呼吸。吸气4秒，呼气6秒。", "duration_seconds": 60},
+            {"step_id": "2", "step_type": "MICRO_ACTION", "title": "微动作", "instruction": "只做一个最小的动作：打开相关应用/文件，或写下第一个字。", "duration_seconds": 120},
+            {"step_id": "3", "step_type": "REWARD", "title": "肯定", "instruction": "告诉自己：'我启动了，这就是胜利。' 不需要完成更多。", "duration_seconds": 30}
+        ],
+        "焦虑回避": [
+            {"step_id": "1", "step_type": "GROUNDING", "title": "安全确认", "instruction": "告诉自己：'我现在是安全的，任务不会伤害我。' 深呼吸3次。", "duration_seconds": 60},
+            {"step_id": "2", "step_type": "TWO_MINUTE_START", "title": "2分钟启动", "instruction": "设置计时器2分钟。告诉自己：'我只做2分钟，然后可以停止。'", "duration_seconds": 120},
+            {"step_id": "3", "step_type": "BODY_CHECK", "title": "身体检查", "instruction": "检查肩膀是否紧绷。如果有，下沉肩膀。保持呼吸。", "duration_seconds": 30}
+        ],
+        "启动困难": [
+            {"step_id": "1", "step_type": "MICRO_ACTION", "title": "环境准备", "instruction": "只做一件事：打开需要的应用/文件/工具。不做任何其他动作。", "duration_seconds": 60},
+            {"step_id": "2", "step_type": "TWO_MINUTE_START", "title": "标题写下", "instruction": "在空白处写下任务标题或日期。不需要写内容。", "duration_seconds": 120},
+            {"step_id": "3", "step_type": "REWARD", "title": "启动确认", "instruction": "告诉自己：'我已经启动了，这比完美计划更重要。'", "duration_seconds": 30}
+        ],
+        "完美主义瘫痪": [
+            {"step_id": "1", "step_type": "GROUNDING", "title": "标准降级", "instruction": "告诉自己：'今天的标准只是存在，不是完美。' 深呼吸3次。", "duration_seconds": 60},
+            {"step_id": "2", "step_type": "MICRO_ACTION", "title": "粗糙版本", "instruction": "故意做一个粗糙的版本。拼写错误没关系，格式混乱没关系。", "duration_seconds": 120},
+            {"step_id": "3", "step_type": "REWARD", "title": "存在庆祝", "instruction": "庆祝自己产出了'糟糕的第一稿'。所有杰作都从这里开始。", "duration_seconds": 30}
+        ]
+    }
+    
+    # 获取对应序列，或默认使用拖延序列
+    steps = sequences.get(resistance_type, sequences["拖延"])
+    
+    # 如果风险高，添加额外的安抚步骤
+    if current_risk_score >= 0.7:
+        steps.insert(0, {
+            "step_id": "0", 
+            "step_type": "GROUNDING", 
+            "title": "紧急熔断", 
+            "instruction": "立即暂停。你现在处于高负荷状态，这不是你的错。先休息。", 
+            "duration_seconds": 60
+        })
+    
+    return {"steps": steps}
+
+
 # ============================================================
 # 子系统四：身份认同重塑系统 (Identity Reinforcement Engine)
 # ============================================================
