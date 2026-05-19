@@ -1,6 +1,50 @@
+# Dependencies
 node_modules
-.vite
-.env
-.env.*
+.venv
 __pycache__
 *.pyc
+*.pyo
+*.egg-info
+
+# Build outputs
+.vite
+dist
+build
+*.egg
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Cache
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Database
+*.sqlite3
+*.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+
