@@ -264,6 +264,62 @@ def _init_db():
             cur.execute('CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id)')
             cur.execute('CREATE INDEX IF NOT EXISTS idx_checkins_created ON checkins(created_at DESC)')
 
+            # DSS 决策支持系统表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS dss_decision_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id VARCHAR(255) NOT NULL,
+                    title VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    category VARCHAR(50) NOT NULL,
+                    urgency INTEGER CHECK (urgency BETWEEN 1 AND 5) DEFAULT 3,
+                    importance INTEGER CHECK (importance BETWEEN 1 AND 5) DEFAULT 3,
+                    stress_level INTEGER CHECK (stress_level BETWEEN 0 AND 10) DEFAULT 5,
+                    anxiety_level INTEGER CHECK (anxiety_level BETWEEN 0 AND 10) DEFAULT 5,
+                    fatigue_level INTEGER CHECK (fatigue_level BETWEEN 0 AND 10) DEFAULT 5,
+                    spiritual_dryness INTEGER CHECK (spiritual_dryness BETWEEN 0 AND 10) DEFAULT 5,
+                    emotional_stability INTEGER CHECK (emotional_stability BETWEEN 0 AND 10) DEFAULT 5,
+                    physical_health INTEGER CHECK (physical_health BETWEEN 0 AND 10) DEFAULT 5,
+                    sleep_quality INTEGER CHECK (sleep_quality BETWEEN 0 AND 10) DEFAULT 5,
+                    social_connection INTEGER CHECK (social_connection BETWEEN 0 AND 10) DEFAULT 5,
+                    financial_pressure INTEGER CHECK (financial_pressure BETWEEN 0 AND 10) DEFAULT 5,
+                    cognitive_clarity INTEGER CHECK (cognitive_clarity BETWEEN 0 AND 10) DEFAULT 5,
+                    identity_confusion INTEGER CHECK (identity_confusion BETWEEN 0 AND 10) DEFAULT 5,
+                    moral_tension INTEGER CHECK (moral_tension BETWEEN 0 AND 10) DEFAULT 5,
+                    motive_analysis JSONB,
+                    discernment_result JSONB,
+                    guidance JSONB,
+                    emotion_logs JSONB DEFAULT '[]',
+                    context_factors JSONB,
+                    status VARCHAR(20) DEFAULT 'analyzing',
+                    final_decision TEXT,
+                    outcome_status VARCHAR(20) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    analyzed_at TIMESTAMP,
+                    decided_at TIMESTAMP,
+                    reviewed_at TIMESTAMP
+                )
+            ''')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_dss_decisions_user ON dss_decision_events(user_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_dss_decisions_status ON dss_decision_events(status)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_dss_decisions_created ON dss_decision_events(created_at DESC)')
+
+            # DSS 回顾日志表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS dss_review_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    decision_id UUID REFERENCES dss_decision_events(id) ON DELETE CASCADE,
+                    user_id VARCHAR(255) NOT NULL,
+                    outcome_description TEXT NOT NULL,
+                    peace_level INTEGER CHECK (peace_level BETWEEN -5 AND 5),
+                    regret_level INTEGER CHECK (regret_level BETWEEN 0 AND 10),
+                    lessons_learned TEXT,
+                    growth_impact TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             conn.commit()
     finally:
         _release_db(conn)
@@ -283,6 +339,14 @@ async def lifespan(app: FastAPI):
     # 注入数据库函数到 auth 模块
     from backend.auth import init_db_functions
     init_db_functions(_get_db, _release_db)
+
+    # 初始化 DSS 决策支持系统
+    if has_database and _db_pool:
+        try:
+            init_dss_storage(_db_pool)
+            print('[startup] DSS storage initialized', flush=True)
+        except Exception as exc:
+            print(f'[startup] DSS init skipped: {exc}', flush=True)
 
     # 预热查询缓存（如果有）
     try:
@@ -415,6 +479,10 @@ async def security_headers(request: Request, call_next):
 # ── 注册认证路由 ───────────────────────────────────────────────
 from backend.auth import router as auth_router
 app.include_router(auth_router)
+
+# ── 注册决策支持路由 (DSS) ────────────────────────────────────
+from backend.decision_support import router as dss_router, init_dss_storage
+app.include_router(dss_router)
 
 
 # ── 健康检查 ──────────────────────────────────────────────────
