@@ -15,6 +15,7 @@ const IgnitionPanel = lazy(() => import('./IgnitionPanel'))
 const MicroMomentumPanel = lazy(() => import('./MicroMomentumPanel'))
 const LoginScreen = lazy(() => import('./LoginScreen'))
 const StoryCard = lazy(() => import('./StoryCard'))
+const DecisionSupportPage = lazy(() => import('./DecisionSupportPage'))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -85,6 +86,10 @@ export const router = createBrowserRouter([
       {
         path: 'story/:storyId',
         element: <StoryCard />
+      },
+      {
+        path: 'decision-support',
+        element: <DecisionSupportPage />
       },
       {
         path: 'login',

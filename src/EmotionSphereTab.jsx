@@ -10,6 +10,7 @@ import LoginScreen from './LoginScreen'
 import StoryCard from './StoryCard'
 import PsychologyPanel from './PsychologyPanel'
 import ExecutionPanel from './ExecutionPanel'
+import DecisionSupportPage from './DecisionSupportPage'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -142,6 +143,7 @@ export default function EmotionSphereTab() {
   const [storyEmotion, setStoryEmotion] = useState(null)
   const [showPsychology, setShowPsychology] = useState(false)
   const [showExecution, setShowExecution] = useState(false)
+  const [showDecisionSupport, setShowDecisionSupport] = useState(false)
         
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
@@ -1275,6 +1277,11 @@ export default function EmotionSphereTab() {
                           onClick={() => setShowExecution(true)}>
                     ⚡ 执行力
                   </button>
+                  <button className="segment decision-btn" type="button"
+                          onClick={() => setShowDecisionSupport(true)}
+                          style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff'}}>
+                    🎯 决策支持
+                  </button>
                 </div>
               </section>
               <section className="mobile-card glass stats-gradient">
@@ -1323,6 +1330,19 @@ export default function EmotionSphereTab() {
               ✕ 关闭
             </button>
             <ExecutionPanel />
+          </div>
+        </div>
+      )}
+      {showDecisionSupport && (
+        <div className="psychology-overlay">
+          <div className="psychology-modal" style={{maxWidth: '900px', width: '95%'}}>
+            <button 
+              className="close-psychology-btn"
+              onClick={() => setShowDecisionSupport(false)}
+            >
+              ✕ 关闭
+            </button>
+            <DecisionSupportPage user={user} onBack={() => setShowDecisionSupport(false)} embedded={true} />
           </div>
         </div>
       )}
