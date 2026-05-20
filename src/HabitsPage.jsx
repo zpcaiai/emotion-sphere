@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchHabits, fetchHabitsDashboard, createHabit, executeHabit, logHabitExecution } from './api'
 import { getToken } from './auth'
+import EmojiPicker from './EmojiPicker'
 
 /**
  * 人格塑造、习惯养成、行为追踪页面
@@ -380,45 +381,63 @@ export default function HabitsPage({ user, embedded = false }) {
           <label style={{ display: 'block', fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>
             习惯名称 *
           </label>
-          <input
-            type="text"
-            value={newHabitName}
-            onChange={(e) => setNewHabitName(e.target.value)}
-            placeholder="例如：晨间冥想、阅读、运动..."
-            style={{
-              width: '100%',
-              padding: '14px 16px',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: 'rgba(255,255,255,0.05)',
-              color: '#fff',
-              fontSize: '16px',
-              outline: 'none',
-            }}
-            required
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={newHabitName}
+              onChange={(e) => setNewHabitName(e.target.value)}
+              placeholder="例如：晨间冥想、阅读、运动..."
+              style={{
+                width: '100%',
+                padding: '14px 40px 14px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.05)',
+                color: '#fff',
+                fontSize: '16px',
+                outline: 'none',
+              }}
+              required
+            />
+            <div style={{ position: 'absolute', top: '50%', right: '10px', transform: 'translateY(-50%)', zIndex: 2 }}>
+              <EmojiPicker
+                onEmojiSelect={(emoji) => setNewHabitName((prev) => prev + emoji)}
+                trigger="😊"
+                size={18}
+              />
+            </div>
+          </div>
         </div>
 
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>
             确定性锚点 (可选)
           </label>
-          <input
-            type="text"
-            value={newHabitAnchor}
-            onChange={(e) => setNewHabitAnchor(e.target.value)}
-            placeholder="例如：早晨刷牙后、喝完咖啡后..."
-            style={{
-              width: '100%',
-              padding: '14px 16px',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: 'rgba(255,255,255,0.05)',
-              color: '#fff',
-              fontSize: '16px',
-              outline: 'none',
-            }}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={newHabitAnchor}
+              onChange={(e) => setNewHabitAnchor(e.target.value)}
+              placeholder="例如：早晨刷牙后、喝完咖啡后..."
+              style={{
+                width: '100%',
+                padding: '14px 40px 14px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.05)',
+                color: '#fff',
+                fontSize: '16px',
+                outline: 'none',
+              }}
+            />
+            <div style={{ position: 'absolute', top: '50%', right: '10px', transform: 'translateY(-50%)', zIndex: 2 }}>
+              <EmojiPicker
+                onEmojiSelect={(emoji) => setNewHabitAnchor((prev) => prev + emoji)}
+                trigger="😊"
+                size={18}
+              />
+            </div>
+          </div>
           <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '8px' }}>
             锚点是你每天都会做的固定动作，用来触发新习惯
           </div>

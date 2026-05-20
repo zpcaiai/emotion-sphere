@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { analyzePsychology, fetchPsychologyDashboard, fetchBehavioralExperiments, completeBehavioralExperiment } from './api'
 import { getToken } from './auth'
+import EmojiPicker from './EmojiPicker'
 import './PsychologyPanel.css'
 
 // 情绪强度滑块组件
@@ -396,17 +397,37 @@ function ExperimentTracker({ experiments, onComplete }) {
             </div>
             {selectedExperiment === exp.experiment_id ? (
               <div className="exp-complete-form">
-                <input
-                  type="text"
-                  placeholder="实验结果..."
-                  value={outcome}
-                  onChange={(e) => setOutcome(e.target.value)}
-                />
-                <textarea
-                  placeholder="反思..."
-                  value={reflection}
-                  onChange={(e) => setReflection(e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="实验结果..."
+                    value={outcome}
+                    onChange={(e) => setOutcome(e.target.value)}
+                    style={{ width: '100%', paddingRight: '36px' }}
+                  />
+                  <div style={{ position: 'absolute', bottom: '6px', right: '8px', zIndex: 2 }}>
+                    <EmojiPicker
+                      onEmojiSelect={(emoji) => setOutcome((prev) => prev + emoji)}
+                      trigger="😊"
+                      size={16}
+                    />
+                  </div>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <textarea
+                    placeholder="反思..."
+                    value={reflection}
+                    onChange={(e) => setReflection(e.target.value)}
+                    style={{ width: '100%', paddingRight: '36px', minHeight: '60px' }}
+                  />
+                  <div style={{ position: 'absolute', bottom: '6px', right: '8px', zIndex: 2 }}>
+                    <EmojiPicker
+                      onEmojiSelect={(emoji) => setReflection((prev) => prev + emoji)}
+                      trigger="😊"
+                      size={16}
+                    />
+                  </div>
+                </div>
                 <button onClick={() => handleSubmit(exp.experiment_id)}>提交</button>
                 <button onClick={() => setSelectedExperiment(null)}>取消</button>
               </div>
@@ -504,13 +525,22 @@ export default function PsychologyPanel() {
       {/* 输入区域 */}
       <div className="input-section">
         <div className="section-title">情绪输入</div>
-        <textarea
-          className="emotion-input"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="描述你当前的情绪、处境或困扰..."
-          rows={4}
-        />
+        <div style={{ position: 'relative' }}>
+          <textarea
+            className="emotion-input"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="描述你当前的情绪、处境或困扰..."
+            rows={4}
+          />
+          <div style={{ position: 'absolute', bottom: '8px', right: '8px', zIndex: 2 }}>
+            <EmojiPicker
+              onEmojiSelect={(emoji) => setInputText((prev) => prev + emoji)}
+              trigger="😊"
+              size={18}
+            />
+          </div>
+        </div>
         <IntensitySlider value={intensity} onChange={setIntensity} />
         <button
           className="analyze-btn"

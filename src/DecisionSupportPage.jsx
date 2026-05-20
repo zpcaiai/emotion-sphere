@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from './api'
 import { getToken } from './auth'
+import EmojiPicker from './EmojiPicker'
 
 const sfdsUrl = (path) => `${API_BASE}/sfds${path}`
 const MVFE_BASE = API_BASE + '/mvfe'
@@ -1086,13 +1087,22 @@ export default function DecisionSupportPage({ user, onBack, onDashboard, embedde
             </button>
           ))}
         </div>
-        <textarea
-          value={formData.description}
-          onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-          placeholder="或者，在这里自由写下你的感受..."
-          style={{ ...inputStyle, minHeight: '100px', resize: 'vertical', lineHeight: 1.7 }}
-          required
-        />
+        <div style={{ position: 'relative' }}>
+          <textarea
+            value={formData.description}
+            onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+            placeholder="或者，在这里自由写下你的感受..."
+            style={{ ...inputStyle, minHeight: '100px', resize: 'vertical', lineHeight: 1.7, paddingRight: '40px' }}
+            required
+          />
+          <div style={{ position: 'absolute', bottom: '8px', right: '8px', zIndex: 2 }}>
+            <EmojiPicker
+              onEmojiSelect={(emoji) => setFormData(prev => ({ ...prev, description: prev.description + emoji }))}
+              trigger="😊"
+              size={18}
+            />
+          </div>
+        </div>
 
         {/* 灵镜分析按钮 */}
         <button
