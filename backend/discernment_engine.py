@@ -438,6 +438,21 @@ class DiscernmentEngine:
                 "recommendation": "检查是否忽视了自己的合理需求，寻求平衡点。",
             })
         
+        if primary == SourceType.INNER_WISDOM:
+            risks.append({
+                "factor": "确认偏误风险",
+                "message": "即使是内在智慧驱动的决定，也可能存在盲点或一厢情愿。",
+                "recommendation": "寻求至少一位信任的人印证，并准备面对可能的反对。",
+            })
+        
+        if primary == SourceType.PRIDE:
+            risks.append({
+                "factor": "骄傲驱动风险",
+                "message": "为维护形象或证明自己而做出的决定，往往忽视真实需求。",
+                "recommendation": "问问自己：如果无人知道我的选择，我还会这样做吗？",
+            })
+            score += 1
+        
         if decision.importance_level >= 4 and primary == SourceType.UNCERTAIN:
             risks.append({
                 "factor": "重要但方向不明",
@@ -471,6 +486,9 @@ class DiscernmentEngine:
             reflections.append("写下您最害怕的具体是什么。恐惧往往在真理的光中消散。")
         elif primary == SourceType.PRIDE:
             reflections.append('练习说出"我不知道"和"我需要帮助"，打破自我证明的循环。')
+        elif primary == SourceType.INNER_WISDOM:
+            reflections.append("记录这个感受的来源和特征，便于日后回顾验证。")
+            reflections.append("与一位你信任的导师或朋友分享，寻求外在的印证。")
         elif primary == SourceType.UNCERTAIN:
             reflections.append('不要急于"制造"确定性。拥抱"尚未清楚"也是一种智慧。')
         elif primary == SourceType.SOCIAL_PRESSURE:
