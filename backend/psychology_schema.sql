@@ -1551,10 +1551,10 @@ CREATE TABLE IF NOT EXISTS user_persona_tags (
     first_seen_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_seen_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    confidence      FLOAT DEFAULT 0.8,  -- 0-1 标签抽取置信度
-    
-    CONSTRAINT unique_user_tag_source UNIQUE (user_id, tag_id, source_type)
+    confidence      FLOAT DEFAULT 0.8  -- 0-1 标签抽取置信度
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_persona_tags_unique ON user_persona_tags(user_id, tag_id, source_type);
 
 CREATE INDEX IF NOT EXISTS idx_user_persona_tags_user ON user_persona_tags(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_persona_tags_tag ON user_persona_tags(tag_id);
