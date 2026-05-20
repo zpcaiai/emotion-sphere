@@ -17,6 +17,7 @@ const LoginScreen = lazy(() => import('./LoginScreen'))
 const StoryCard = lazy(() => import('./StoryCard'))
 const DecisionSupportPage = lazy(() => import('./DecisionSupportPage'))
 const HabitsPage = lazy(() => import('./HabitsPage'))
+const PersonaProfilePage = lazy(() => import('./PersonaProfilePage'))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -95,6 +96,10 @@ export const router = createBrowserRouter([
       {
         path: 'habits',
         element: <HabitsPage />
+      },
+      {
+        path: 'persona',
+        element: <PersonaProfilePage />
       },
       {
         path: 'login',

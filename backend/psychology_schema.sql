@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS emotion_logs (
     CONSTRAINT idx_emotion_logs_user_time UNIQUE (user_id, occurred_at, id)
 );
 
-CREATE INDEX idx_emotion_logs_user_id ON emotion_logs(user_id);
-CREATE INDEX idx_emotion_logs_occurred_at ON emotion_logs(occurred_at DESC);
-CREATE INDEX idx_emotion_logs_emotion_tags ON emotion_logs USING GIN(emotion_tags);
+CREATE INDEX IF NOT EXISTS idx_emotion_logs_user_id ON emotion_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_emotion_logs_occurred_at ON emotion_logs(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_emotion_logs_emotion_tags ON emotion_logs USING GIN(emotion_tags);
 
 -- 2. 人格驱动因子模型（因果分析结果）
 CREATE TABLE IF NOT EXISTS personality_drivers (
@@ -66,9 +66,9 @@ CREATE TABLE IF NOT EXISTS personality_drivers (
     analyzed_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_personality_drivers_user_id ON personality_drivers(user_id);
-CREATE INDEX idx_personality_drivers_log_id ON personality_drivers(log_id);
-CREATE INDEX idx_personality_drivers_category ON personality_drivers(driver_category);
+CREATE INDEX IF NOT EXISTS idx_personality_drivers_user_id ON personality_drivers(user_id);
+CREATE INDEX IF NOT EXISTS idx_personality_drivers_log_id ON personality_drivers(log_id);
+CREATE INDEX IF NOT EXISTS idx_personality_drivers_category ON personality_drivers(driver_category);
 
 -- 3. 行为触发器库（Trigger Inventory）
 CREATE TABLE IF NOT EXISTS behavioral_triggers (
@@ -90,8 +90,8 @@ CREATE TABLE IF NOT EXISTS behavioral_triggers (
     created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_behavioral_triggers_user_id ON behavioral_triggers(user_id);
-CREATE INDEX idx_behavioral_triggers_type ON behavioral_triggers(trigger_type);
+CREATE INDEX IF NOT EXISTS idx_behavioral_triggers_user_id ON behavioral_triggers(user_id);
+CREATE INDEX IF NOT EXISTS idx_behavioral_triggers_type ON behavioral_triggers(trigger_type);
 
 -- ============================================================
 -- L1: 行为调节引擎 - 认知图式与干预
@@ -139,9 +139,9 @@ CREATE TABLE IF NOT EXISTS cognitive_schemas (
     resolved_at     TIMESTAMP
 );
 
-CREATE INDEX idx_cognitive_schemas_user_id ON cognitive_schemas(user_id);
-CREATE INDEX idx_cognitive_schemas_distortion ON cognitive_schemas(distortion_type);
-CREATE INDEX idx_cognitive_schemas_active ON cognitive_schemas(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_cognitive_schemas_user_id ON cognitive_schemas(user_id);
+CREATE INDEX IF NOT EXISTS idx_cognitive_schemas_distortion ON cognitive_schemas(distortion_type);
+CREATE INDEX IF NOT EXISTS idx_cognitive_schemas_active ON cognitive_schemas(user_id, is_active);
 
 -- 5. 行为实验表（CBT Behavioral Experiments）
 CREATE TABLE IF NOT EXISTS behavioral_experiments (
@@ -191,10 +191,10 @@ CREATE TABLE IF NOT EXISTS behavioral_experiments (
     reminder_sent   BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX idx_behavioral_experiments_user_id ON behavioral_experiments(user_id);
-CREATE INDEX idx_behavioral_experiments_schema ON behavioral_experiments(schema_id);
-CREATE INDEX idx_behavioral_experiments_status ON behavioral_experiments(status);
-CREATE INDEX idx_behavioral_experiments_scheduled ON behavioral_experiments(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_behavioral_experiments_user_id ON behavioral_experiments(user_id);
+CREATE INDEX IF NOT EXISTS idx_behavioral_experiments_schema ON behavioral_experiments(schema_id);
+CREATE INDEX IF NOT EXISTS idx_behavioral_experiments_status ON behavioral_experiments(status);
+CREATE INDEX IF NOT EXISTS idx_behavioral_experiments_scheduled ON behavioral_experiments(scheduled_at);
 
 -- ============================================================
 -- L2: 执行力边缘引导 - 状态机
@@ -231,9 +231,9 @@ CREATE TABLE IF NOT EXISTS psychological_states (
     state_duration_seconds INTEGER -- 该状态持续多久
 );
 
-CREATE INDEX idx_psychological_states_user_id ON psychological_states(user_id);
-CREATE INDEX idx_psychological_states_captured ON psychological_states(captured_at DESC);
-CREATE INDEX idx_psychological_states_level ON psychological_states(state_level);
+CREATE INDEX IF NOT EXISTS idx_psychological_states_user_id ON psychological_states(user_id);
+CREATE INDEX IF NOT EXISTS idx_psychological_states_captured ON psychological_states(captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_psychological_states_level ON psychological_states(state_level);
 
 -- 7. 执行力干预日志（边缘引导执行记录）
 CREATE TABLE IF NOT EXISTS intervention_logs (
@@ -258,8 +258,8 @@ CREATE TABLE IF NOT EXISTS intervention_logs (
     responded_at    TIMESTAMP
 );
 
-CREATE INDEX idx_intervention_logs_user_id ON intervention_logs(user_id);
-CREATE INDEX idx_intervention_logs_delivered ON intervention_logs(delivered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_intervention_logs_user_id ON intervention_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_intervention_logs_delivered ON intervention_logs(delivered_at DESC);
 
 -- ============================================================
 -- L3: 长期身份认同系统
@@ -296,8 +296,8 @@ CREATE TABLE IF NOT EXISTS identity_narratives (
     CONSTRAINT unique_current_narrative UNIQUE (user_id, is_current) DEFERRABLE INITIALLY DEFERRED
 );
 
-CREATE INDEX idx_identity_narratives_user_id ON identity_narratives(user_id);
-CREATE INDEX idx_identity_narratives_current ON identity_narratives(user_id, is_current) WHERE is_current = TRUE;
+CREATE INDEX IF NOT EXISTS idx_identity_narratives_user_id ON identity_narratives(user_id);
+CREATE INDEX IF NOT EXISTS idx_identity_narratives_current ON identity_narratives(user_id, is_current) WHERE is_current = TRUE;
 
 -- 9. 自我概念模型（Self-Concept）
 CREATE TABLE IF NOT EXISTS self_concept_models (
@@ -321,8 +321,8 @@ CREATE TABLE IF NOT EXISTS self_concept_models (
     next_assessment_at TIMESTAMP
 );
 
-CREATE INDEX idx_self_concept_user_id ON self_concept_models(user_id);
-CREATE INDEX idx_self_concept_assessed ON self_concept_models(assessed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_self_concept_user_id ON self_concept_models(user_id);
+CREATE INDEX IF NOT EXISTS idx_self_concept_assessed ON self_concept_models(assessed_at DESC);
 
 -- ============================================================
 -- L4: 记忆与成长轨迹
@@ -358,8 +358,8 @@ CREATE TABLE IF NOT EXISTS growth_trajectories (
     calculated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_growth_trajectories_user_id ON growth_trajectories(user_id);
-CREATE INDEX idx_growth_trajectories_period ON growth_trajectories(user_id, period_type, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_trajectories_user_id ON growth_trajectories(user_id);
+CREATE INDEX IF NOT EXISTS idx_growth_trajectories_period ON growth_trajectories(user_id, period_type, period_start DESC);
 
 -- 11. 模式识别结果（Pattern Recognition）
 CREATE TABLE IF NOT EXISTS pattern_recognitions (
@@ -390,8 +390,8 @@ CREATE TABLE IF NOT EXISTS pattern_recognitions (
     is_active       BOOLEAN DEFAULT TRUE
 );
 
-CREATE INDEX idx_pattern_recognitions_user_id ON pattern_recognitions(user_id);
-CREATE INDEX idx_pattern_recognitions_type ON pattern_recognitions(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_pattern_recognitions_user_id ON pattern_recognitions(user_id);
+CREATE INDEX IF NOT EXISTS idx_pattern_recognitions_type ON pattern_recognitions(pattern_type);
 
 -- 12. 长期记忆摘要（Episodic Memory Consolidation）
 CREATE TABLE IF NOT EXISTS memory_consolidations (
@@ -424,9 +424,9 @@ CREATE TABLE IF NOT EXISTS memory_consolidations (
     is_archived         BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX idx_memory_consolidations_user_id ON memory_consolidations(user_id);
-CREATE INDEX idx_memory_consolidations_type ON memory_consolidations(memory_type);
-CREATE INDEX idx_memory_consolidations_strength ON memory_consolidations(user_id, memory_strength DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_consolidations_user_id ON memory_consolidations(user_id);
+CREATE INDEX IF NOT EXISTS idx_memory_consolidations_type ON memory_consolidations(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memory_consolidations_strength ON memory_consolidations(user_id, memory_strength DESC);
 
 -- ============================================================
 -- 视图与辅助功能
@@ -552,10 +552,10 @@ CREATE TABLE IF NOT EXISTS psychology_analysis_results (
     updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_psych_analysis_user ON psychology_analysis_results(user_id);
-CREATE INDEX idx_psych_analysis_time ON psychology_analysis_results(created_at DESC);
-CREATE INDEX idx_psych_analysis_type ON psychology_analysis_results(analysis_type);
-CREATE INDEX idx_psych_analysis_crisis ON psychology_analysis_results(user_id, is_crisis);
+CREATE INDEX IF NOT EXISTS idx_psych_analysis_user ON psychology_analysis_results(user_id);
+CREATE INDEX IF NOT EXISTS idx_psych_analysis_time ON psychology_analysis_results(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_psych_analysis_type ON psychology_analysis_results(analysis_type);
+CREATE INDEX IF NOT EXISTS idx_psych_analysis_crisis ON psychology_analysis_results(user_id, is_crisis);
 
 -- 触发器自动更新 updated_at
 DROP TRIGGER IF EXISTS trg_psych_analysis_updated ON psychology_analysis_results;
@@ -612,9 +612,9 @@ CREATE TABLE IF NOT EXISTS behavior_regulation_sessions (
     continuity_preserved    BOOLEAN DEFAULT TRUE
 );
 
-CREATE INDEX idx_behavior_sessions_user ON behavior_regulation_sessions(user_id);
-CREATE INDEX idx_behavior_sessions_time ON behavior_regulation_sessions(started_at DESC);
-CREATE INDEX idx_behavior_sessions_energy ON behavior_regulation_sessions(user_id, energy_level);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_user ON behavior_regulation_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_time ON behavior_regulation_sessions(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_energy ON behavior_regulation_sessions(user_id, energy_level);
 
 -- 14. 习惯状态机定义 (FSM - Causal Habit State Machine)
 CREATE TABLE IF NOT EXISTS habit_state_machines (
@@ -651,8 +651,8 @@ CREATE TABLE IF NOT EXISTS habit_state_machines (
     last_execution_at       TIMESTAMP
 );
 
-CREATE INDEX idx_habit_machines_user ON habit_state_machines(user_id);
-CREATE INDEX idx_habit_machines_active ON habit_state_machines(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_habit_machines_user ON habit_state_machines(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_machines_active ON habit_state_machines(user_id, is_active);
 
 -- 15. 习惯执行日志 (状态机运行记录)
 CREATE TABLE IF NOT EXISTS habit_execution_logs (
@@ -684,9 +684,9 @@ CREATE TABLE IF NOT EXISTS habit_execution_logs (
     executed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_habit_logs_user ON habit_execution_logs(user_id);
-CREATE INDEX idx_habit_logs_habit ON habit_execution_logs(habit_id);
-CREATE INDEX idx_habit_logs_time ON habit_execution_logs(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_user ON habit_execution_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit ON habit_execution_logs(habit_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_time ON habit_execution_logs(executed_at DESC);
 
 -- 16. 用户代币账本 (Gamified Credit Ledger)
 CREATE TABLE IF NOT EXISTS user_token_ledgers (
@@ -705,7 +705,7 @@ CREATE TABLE IF NOT EXISTS user_token_ledgers (
     last_updated        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX idx_token_ledger_user ON user_token_ledgers(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_token_ledger_user ON user_token_ledgers(user_id);
 
 -- 17. 代币交易记录
 CREATE TABLE IF NOT EXISTS token_transactions (
@@ -725,8 +725,8 @@ CREATE TABLE IF NOT EXISTS token_transactions (
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_token_tx_user ON token_transactions(user_id);
-CREATE INDEX idx_token_tx_time ON token_transactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_token_tx_user ON token_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_token_tx_time ON token_transactions(created_at DESC);
 
 -- 为习惯表添加更新时间触发器
 DROP TRIGGER IF EXISTS trg_habit_machines_updated ON habit_state_machines;
@@ -811,9 +811,9 @@ CREATE TABLE IF NOT EXISTS execution_paralysis_logs (
     completed_at        TIMESTAMP
 );
 
-CREATE INDEX idx_paralysis_logs_user ON execution_paralysis_logs(user_id);
-CREATE INDEX idx_paralysis_logs_time ON execution_paralysis_logs(detected_at DESC);
-CREATE INDEX idx_paralysis_logs_type ON execution_paralysis_logs(paralysis_type);
+CREATE INDEX IF NOT EXISTS idx_paralysis_logs_user ON execution_paralysis_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_paralysis_logs_time ON execution_paralysis_logs(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_paralysis_logs_type ON execution_paralysis_logs(paralysis_type);
 
 -- 19. 微调度器会话 (实时微干预追踪)
 CREATE TABLE IF NOT EXISTS micro_scheduler_sessions (
@@ -847,8 +847,8 @@ CREATE TABLE IF NOT EXISTS micro_scheduler_sessions (
     completed_at        TIMESTAMP
 );
 
-CREATE INDEX idx_micro_scheduler_user ON micro_scheduler_sessions(user_id);
-CREATE INDEX idx_micro_scheduler_status ON micro_scheduler_sessions(session_status);
+CREATE INDEX IF NOT EXISTS idx_micro_scheduler_user ON micro_scheduler_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_micro_scheduler_status ON micro_scheduler_sessions(session_status);
 
 -- 20. 执行意图模板库 (Implementation Intentions Library)
 CREATE TABLE IF NOT EXISTS implementation_intentions (
@@ -873,8 +873,8 @@ CREATE TABLE IF NOT EXISTS implementation_intentions (
     last_used_at        TIMESTAMP
 );
 
-CREATE INDEX idx_intentions_user ON implementation_intentions(user_id);
-CREATE INDEX idx_intentions_active ON implementation_intentions(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_intentions_user ON implementation_intentions(user_id);
+CREATE INDEX IF NOT EXISTS idx_intentions_active ON implementation_intentions(user_id, is_active);
 
 -- 21. 边缘干预效果追踪
 CREATE TABLE IF NOT EXISTS edge_intervention_analytics (
@@ -907,8 +907,8 @@ CREATE TABLE IF NOT EXISTS edge_intervention_analytics (
     calculated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_edge_analytics_user ON edge_intervention_analytics(user_id);
-CREATE INDEX idx_edge_analytics_period ON edge_intervention_analytics(user_id, period_type, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_edge_analytics_user ON edge_intervention_analytics(user_id);
+CREATE INDEX IF NOT EXISTS idx_edge_analytics_period ON edge_intervention_analytics(user_id, period_type, period_start DESC);
 
 -- 执行力系统仪表盘视图
 CREATE OR REPLACE VIEW user_execution_dashboard AS
@@ -991,9 +991,9 @@ CREATE TABLE IF NOT EXISTS identity_reinforcement_logs (
     reinforced_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_identity_logs_user ON identity_reinforcement_logs(user_id);
-CREATE INDEX idx_identity_logs_time ON identity_reinforcement_logs(reinforced_at DESC);
-CREATE INDEX idx_identity_logs_category ON identity_reinforcement_logs(identity_category);
+CREATE INDEX IF NOT EXISTS idx_identity_logs_user ON identity_reinforcement_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_identity_logs_time ON identity_reinforcement_logs(reinforced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_identity_logs_category ON identity_reinforcement_logs(identity_category);
 
 -- 23. 长期人格迁移追踪 (Personality Migration Tracker)
 CREATE TABLE IF NOT EXISTS personality_migrations (
@@ -1023,8 +1023,8 @@ CREATE TABLE IF NOT EXISTS personality_migrations (
     achieved_at         TIMESTAMP
 );
 
-CREATE INDEX idx_migration_user ON personality_migrations(user_id);
-CREATE INDEX idx_migration_dimension ON personality_migrations(user_id, migration_dimension);
+CREATE INDEX IF NOT EXISTS idx_migration_user ON personality_migrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_migration_dimension ON personality_migrations(user_id, migration_dimension);
 
 -- 24. 身份认同仪表盘快照
 CREATE OR REPLACE VIEW user_identity_dashboard AS
@@ -1131,7 +1131,7 @@ CREATE TABLE IF NOT EXISTS user_system_states (
     last_updated            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_user_states_current ON user_system_states(user_id, current_state_code);
+CREATE INDEX IF NOT EXISTS idx_user_states_current ON user_system_states(user_id, current_state_code);
 
 -- 27. 状态迁移历史日志 (State Transition Log)
 CREATE TABLE IF NOT EXISTS state_transition_logs (
@@ -1156,8 +1156,8 @@ CREATE TABLE IF NOT EXISTS state_transition_logs (
     transitioned_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_state_transitions_user ON state_transition_logs(user_id);
-CREATE INDEX idx_state_transitions_time ON state_transition_logs(transitioned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_state_transitions_user ON state_transition_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_state_transitions_time ON state_transition_logs(transitioned_at DESC);
 
 -- 28. 全局数据总线事件 (Data Bus Events)
 CREATE TABLE IF NOT EXISTS data_bus_events (
@@ -1182,8 +1182,8 @@ CREATE TABLE IF NOT EXISTS data_bus_events (
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_bus_events_unprocessed ON data_bus_events(is_processed, priority DESC, created_at);
-CREATE INDEX idx_bus_events_target ON data_bus_events(event_target, is_processed);
+CREATE INDEX IF NOT EXISTS idx_bus_events_unprocessed ON data_bus_events(is_processed, priority DESC, created_at);
+CREATE INDEX IF NOT EXISTS idx_bus_events_target ON data_bus_events(event_target, is_processed);
 
 -- 29. 动态负载均衡器配置 (Dynamic Load Balancer)
 CREATE TABLE IF NOT EXISTS dynamic_load_configs (
@@ -1211,7 +1211,7 @@ CREATE TABLE IF NOT EXISTS dynamic_load_configs (
     updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX idx_load_config_user ON dynamic_load_configs(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_load_config_user ON dynamic_load_configs(user_id);
 
 -- ============================================================
 -- 心理学分析仪表盘视图
@@ -1357,8 +1357,8 @@ CREATE TABLE IF NOT EXISTS data_versions (
     UNIQUE(table_name, record_id, version)
 );
 
-CREATE INDEX idx_data_versions_record ON data_versions(table_name, record_id, version DESC);
-CREATE INDEX idx_data_versions_changed_at ON data_versions(changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_data_versions_record ON data_versions(table_name, record_id, version DESC);
+CREATE INDEX IF NOT EXISTS idx_data_versions_changed_at ON data_versions(changed_at DESC);
 
 -- 版本号自动递增触发器函数
 CREATE OR REPLACE FUNCTION increment_version()
@@ -1395,10 +1395,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     executed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_logs_table ON audit_logs(table_name, executed_at DESC);
-CREATE INDEX idx_audit_logs_user ON audit_logs(user_id, executed_at DESC);
-CREATE INDEX idx_audit_logs_record ON audit_logs(record_id, executed_at DESC);
-CREATE INDEX idx_audit_logs_request ON audit_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_table ON audit_logs(table_name, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_record ON audit_logs(record_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
 
 -- 审计日志触发器函数
 CREATE OR REPLACE FUNCTION audit_trigger_func()
@@ -1491,6 +1491,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 为关键表启用审计日志（示例：emotion_logs）
+DROP TRIGGER IF EXISTS emotion_logs_audit ON emotion_logs;
 CREATE TRIGGER emotion_logs_audit
     AFTER INSERT OR UPDATE OR DELETE ON emotion_logs
     FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
@@ -1511,8 +1512,96 @@ CREATE TABLE IF NOT EXISTS archived_data (
     anonymized      BOOLEAN DEFAULT FALSE -- 是否已匿名化
 );
 
-CREATE INDEX idx_archived_data_user ON archived_data(user_id, archived_at DESC);
-CREATE INDEX idx_archived_data_retention ON archived_data(retention_until) WHERE retention_until IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_archived_data_user ON archived_data(user_id, archived_at DESC);
+CREATE INDEX IF NOT EXISTS idx_archived_data_retention ON archived_data(retention_until) WHERE retention_until IS NOT NULL;
+
+-- ============================================================
+-- 子系统四：用户人格画像标签系统 (Persona Tag System)
+-- ============================================================
+
+-- 34. 标签库（预定义 + 用户自定义）
+CREATE TABLE IF NOT EXISTS persona_tags (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tag_name        VARCHAR(100) NOT NULL,
+    tag_category    VARCHAR(50) NOT NULL,  -- emotion/behavior/habit/personality/cognition/relationship/value
+    tag_type        VARCHAR(20) DEFAULT 'auto',  -- auto/manual/system
+    description     TEXT,
+    synonyms        TEXT[],
+    keywords        TEXT[],
+    weight_default  FLOAT DEFAULT 1.0,
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_persona_tags_name ON persona_tags(tag_name, tag_category);
+CREATE INDEX IF NOT EXISTS idx_persona_tags_category ON persona_tags(tag_category);
+
+-- 35. 用户标签关联（带权重和频次）
+CREATE TABLE IF NOT EXISTS user_persona_tags (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    tag_id          UUID REFERENCES persona_tags(id) ON DELETE CASCADE,
+    
+    weight          FLOAT DEFAULT 1.0,  -- 当前权重 0-10
+    frequency       INTEGER DEFAULT 1,
+    
+    source_type     VARCHAR(50),  -- emotion_log/decision/behavior_regulation/habit_creation/manual
+    source_id       UUID,
+    
+    first_seen_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    confidence      FLOAT DEFAULT 0.8,  -- 0-1 标签抽取置信度
+    
+    CONSTRAINT unique_user_tag_source UNIQUE (user_id, tag_id, source_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_persona_tags_user ON user_persona_tags(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_persona_tags_tag ON user_persona_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_user_persona_tags_weight ON user_persona_tags(user_id, weight DESC);
+
+-- 36. 用户人格画像（聚合表）
+CREATE TABLE IF NOT EXISTS user_persona_profiles (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    
+    tag_cloud       JSONB DEFAULT '{}',
+    emotion_dominance JSONB DEFAULT '{}',
+    behavior_patterns JSONB DEFAULT '{}',
+    habit_strength  JSONB DEFAULT '{}',
+    personality_vector JSONB DEFAULT '{}',
+    
+    stability_score FLOAT,
+    resilience_score FLOAT,
+    growth_trend    VARCHAR(20),  -- improving/stable/declining
+    risk_level      VARCHAR(20),    -- low/moderate/high
+    
+    profile_version INTEGER DEFAULT 1,
+    computed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_persona_profiles_user ON user_persona_profiles(user_id);
+
+DROP TRIGGER IF EXISTS trg_user_persona_profiles_updated ON user_persona_profiles;
+CREATE TRIGGER trg_user_persona_profiles_updated
+BEFORE UPDATE ON user_persona_profiles
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- 37. 标签抽取规则库（关键词匹配）
+CREATE TABLE IF NOT EXISTS tag_extraction_rules (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tag_id          UUID REFERENCES persona_tags(id) ON DELETE CASCADE,
+    pattern_type    VARCHAR(20) DEFAULT 'keyword',  -- keyword/regex/semantic
+    pattern_value   TEXT NOT NULL,
+    weight_boost    FLOAT DEFAULT 1.0,
+    context_hint    VARCHAR(50),  -- 适用上下文: emotion/decision/behavior/habit
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tag_extraction_rules_tag ON tag_extraction_rules(tag_id);
+CREATE INDEX IF NOT EXISTS idx_tag_extraction_rules_pattern ON tag_extraction_rules(pattern_value);
 
 -- ============================================================
 -- 初始化说明

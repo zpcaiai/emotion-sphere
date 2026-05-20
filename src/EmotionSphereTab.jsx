@@ -12,6 +12,7 @@ import PsychologyPanel from './PsychologyPanel'
 import ExecutionPanel from './ExecutionPanel'
 import DecisionSupportPage from './DecisionSupportPage'
 import HabitsPage from './HabitsPage'
+import PersonaProfilePage from './PersonaProfilePage'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -146,7 +147,8 @@ export default function EmotionSphereTab() {
   const [showExecution, setShowExecution] = useState(false)
   const [showDecisionSupport, setShowDecisionSupport] = useState(false)
   const [showHabits, setShowHabits] = useState(false)
-        
+  const [showPersona, setShowPersona] = useState(false)
+
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
   const [recordingError, setRecordingError] = useState(null)
@@ -1289,6 +1291,11 @@ export default function EmotionSphereTab() {
                           style={{background: 'linear-gradient(135deg, #34c759 0%, #30d158 100%)', color: '#fff'}}>
                     🌱 习惯养成
                   </button>
+                  <button className="segment persona-btn" type="button"
+                          onClick={() => setShowPersona(true)}
+                          style={{background: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)', color: '#fff'}}>
+                    👤 人格画像
+                  </button>
                 </div>
               </section>
               <section className="mobile-card glass stats-gradient">
@@ -1356,13 +1363,26 @@ export default function EmotionSphereTab() {
       {showHabits && (
         <div className="psychology-overlay">
           <div className="psychology-modal" style={{maxWidth: '500px', width: '95%', maxHeight: '90vh', overflow: 'auto'}}>
-            <button 
+            <button
               className="close-psychology-btn"
               onClick={() => setShowHabits(false)}
             >
               ✕ 关闭
             </button>
             <HabitsPage user={user} embedded={true} />
+          </div>
+        </div>
+      )}
+      {showPersona && (
+        <div className="psychology-overlay">
+          <div className="psychology-modal" style={{maxWidth: '800px', width: '95%', maxHeight: '90vh', overflow: 'auto'}}>
+            <button
+              className="close-psychology-btn"
+              onClick={() => setShowPersona(false)}
+            >
+              ✕ 关闭
+            </button>
+            <PersonaProfilePage user={user} embedded={true} />
           </div>
         </div>
       )}

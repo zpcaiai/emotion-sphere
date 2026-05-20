@@ -1110,3 +1110,88 @@ export async function fetchBehaviorStats(userId, token) {
   console.log(`[api] fetchBehaviorStats ok`)
   return data
 }
+
+// ── 人格画像标签系统 API ─────────────────────────────────────
+
+export async function fetchPersonaTags(token, category = null, limit = 50) {
+  console.log(`[api] fetchPersonaTags cat=${category}`)
+  const url = new URL(`${API_BASE}/persona/tags`)
+  if (category) url.searchParams.set('category', category)
+  url.searchParams.set('limit', limit)
+  const response = await fetch(url, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '获取标签失败')
+  console.log(`[api] fetchPersonaTags ok count=${data.total}`)
+  return data
+}
+
+export async function fetchPersonaProfile(token) {
+  console.log(`[api] fetchPersonaProfile`)
+  const response = await fetch(`${API_BASE}/persona/profile`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '获取人格画像失败')
+  console.log(`[api] fetchPersonaProfile ok tags=${data.total_tags}`)
+  return data
+}
+
+export async function extractPersonaTags(text, context = 'general', token = null) {
+  console.log(`[api] extractPersonaTags text=${text.slice(0, 30)}`)
+  const response = await fetch(`${API_BASE}/persona/extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ text, context })
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '标签抽取失败')
+  console.log(`[api] extractPersonaTags ok count=${data.count}`)
+  return data
+}
+
+export async function addPersonaTag(tagName, category = 'manual', weight = 1.0, token) {
+  console.log(`[api] addPersonaTag tag=${tagName}`)
+  const response = await fetch(`${API_BASE}/persona/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ tag_name: tagName, tag_category: category, weight })
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '添加标签失败')
+  console.log(`[api] addPersonaTag ok`)
+  return data
+}
+
+export async function deletePersonaTag(tagId, token) {
+  console.log(`[api] deletePersonaTag id=${tagId}`)
+  const response = await fetch(`${API_BASE}/persona/tags/${tagId}`, {
+    method: 'DELETE',
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '删除标签失败')
+  console.log(`[api] deletePersonaTag ok`)
+  return data
+}

@@ -1397,10 +1397,22 @@ def psychology_analyze(payload: PsychologyAnalyzeRequest, request: Request):
                     
                     conn.commit()
                     result['saved_log_id'] = log_id
+
+                    # Auto-extract persona tags from analysis
+                    try:
+                        from backend.persona_tag_engine import get_tag_engine
+                        engine = get_tag_engine()
+                        tags = engine.auto_extract_and_store(
+                            conn, user_id, payload.text, 'emotion_log', str(log_id), result
+                        )
+                        result['extracted_tags'] = tags
+                    except Exception as te:
+                        print(f'[persona_tags] Extraction failed: {te}', flush=True)
+
                 _release_db(conn)
             except Exception as e:
                 print(f'[psychology] Failed to save log: {e}', flush=True)
-        
+
         return result
         
     except Exception as exc:
@@ -1612,15 +1624,15 @@ def create_habit(payload: HabitCreateRequest, request: Request):
     try:
         from backend.psychology_engine import create_habit
         result = create_habit(payload.habit_name, payload.anchor, payload.energy_level)
-        
+
         # 保存到数据库
         conn = _get_db()
         try:
             with conn.cursor() as cur:
                 fsm_config = result.get('habit_config', {})
                 cur.execute(
-                    '''INSERT INTO habit_state_machines 
-                       (user_id, habit_name, deterministic_anchor, 
+                    '''INSERT INTO habit_state_machines
+                       (user_id, habit_name, deterministic_anchor,
                         tier_green_config, tier_yellow_config, tier_red_config,
                         token_green_yield, token_yellow_yield, token_red_yield)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -1632,13 +1644,25 @@ def create_habit(payload: HabitCreateRequest, request: Request):
                      10, 5, 1)
                 )
                 row = cur.fetchone()
+                habit_id = str(row[0])
+                result['saved_habit_id'] = habit_id
                 conn.commit()
-                result['saved_habit_id'] = str(row[0])
+
+                # Auto-extract persona tags from habit creation
+                try:
+                    from backend.persona_tag_engine import get_tag_engine
+                    engine = get_tag_engine()
+                    habit_text = f"{payload.habit_name} {payload.anchor}"
+                    engine.auto_extract_and_store(
+                        conn, user_id, habit_text, 'habit_creation', habit_id
+                    )
+                except Exception as te:
+                    print(f'[persona_tags] Habit extraction failed: {te}', flush=True)
         finally:
             _release_db(conn)
-        
+
         return result
-        
+
     except Exception as exc:
         print(f'[habits_create] Failed: {exc}', flush=True)
         raise HTTPException(status_code=500, detail='创建习惯失败')
@@ -2989,6 +3013,17 @@ def behavior_regulate(payload: BehaviorRegulateRequest, request: Request):
                      result.get('continuity_advice'))
                 )
                 conn.commit()
+
+                # Auto-extract persona tags from behavior regulation
+                try:
+                    from backend.persona_tag_engine import get_tag_engine
+                    engine = get_tag_engine()
+                    behavior_text = f"{payload.task} 能量{payload.energy_level} 动机{payload.motivation}"
+                    engine.auto_extract_and_store(
+                        conn, user['id'], behavior_text, 'behavior_regulation', None
+                    )
+                except Exception as te:
+                    print(f'[persona_tags] Behavior extraction failed: {te}', flush=True)
         finally:
             _release_db(conn)
 
@@ -3394,6 +3429,139 @@ async def get_formation_profile(user_id: str = None, request: Request = None):
             'data_points': 0,
             'note': 'Formation tracking begins with your first decision analysis.'
         }
+
+
+# ── 人格画像标签系统 API ───────────────────────────────────────
+
+class ExtractTagsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    context: str = Field(default='general')
+
+class AddTagRequest(BaseModel):
+    tag_name: str = Field(min_length=1, max_length=100)
+    tag_category: str = Field(default='manual')
+    weight: float = Field(default=1.0, ge=0.1, le=10.0)
+
+
+@app.post('/api/persona/extract')
+def extract_persona_tags(payload: ExtractTagsRequest, request: Request):
+    """从文本中抽取人格标签"""
+    user = _optional_user(request)
+    try:
+        from backend.persona_tag_engine import get_tag_engine
+        engine = get_tag_engine()
+        tags = engine.extract_tags_from_text(payload.text, payload.context)
+        return {
+            'tags': tags,
+            'count': len(tags),
+            'text_preview': payload.text[:50] + '...' if len(payload.text) > 50 else payload.text
+        }
+    except Exception as exc:
+        print(f'[persona_extract] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='标签抽取失败')
+
+
+@app.get('/api/persona/tags')
+def get_persona_tags(category: str = None, limit: int = 50, request: Request = None):
+    """获取用户的人格标签列表"""
+    user = _require_user(request)
+    user_id = user['id']
+    conn = _get_db()
+    try:
+        from backend.persona_tag_engine import get_tag_engine
+        engine = get_tag_engine()
+        tags = engine.get_user_tags(conn, user_id, category, limit)
+        return {
+            'tags': tags,
+            'category': category or 'all',
+            'total': len(tags)
+        }
+    except Exception as exc:
+        print(f'[persona_tags] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='获取标签失败')
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/persona/tags')
+def add_persona_tag(payload: AddTagRequest, request: Request):
+    """手动添加用户标签"""
+    user = _require_user(request)
+    user_id = user['id']
+    conn = _get_db()
+    try:
+        from backend.persona_tag_engine import get_tag_engine
+        engine = get_tag_engine()
+        engine.ensure_system_tags_in_db(conn)
+        stored = engine.store_user_tags(conn, user_id, [{
+            'tag_name': payload.tag_name,
+            'tag_category': payload.tag_category,
+            'weight': payload.weight,
+            'confidence': 1.0
+        }], source_type='manual')
+        return {'success': True, 'tag': stored[0] if stored else None}
+    except Exception as exc:
+        print(f'[persona_add_tag] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='添加标签失败')
+    finally:
+        _release_db(conn)
+
+
+@app.delete('/api/persona/tags/{tag_id}')
+def delete_persona_tag(tag_id: str, request: Request):
+    """删除用户标签关联"""
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'DELETE FROM user_persona_tags WHERE id = %s AND user_id = %s RETURNING id',
+                (tag_id, user['id'])
+            )
+            row = cur.fetchone()
+            conn.commit()
+            if not row:
+                raise HTTPException(status_code=404, detail='标签不存在或无权限')
+        return {'success': True, 'deleted_id': tag_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f'[persona_delete_tag] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='删除标签失败')
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/persona/profile')
+def get_persona_profile(request: Request):
+    """获取用户人格画像"""
+    user = _require_user(request)
+    user_id = user['id']
+    conn = _get_db()
+    try:
+        from backend.persona_tag_engine import get_tag_engine
+        engine = get_tag_engine()
+        profile = engine.compute_user_profile(conn, user_id)
+        return profile
+    except Exception as exc:
+        print(f'[persona_profile] Failed: {exc}', flush=True)
+        # Return empty baseline profile
+        return {
+            'user_id': user_id,
+            'tag_cloud': {},
+            'emotion_dominance': {},
+            'behavior_patterns': {},
+            'habit_strength': {},
+            'personality_vector': {},
+            'stability_score': 5.0,
+            'resilience_score': 5.0,
+            'growth_trend': 'stable',
+            'risk_level': 'low',
+            'total_tags': 0,
+            'note': '开始记录你的情绪和习惯，人格画像将逐渐成形。'
+        }
+    finally:
+        _release_db(conn)
 
 
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
