@@ -2927,6 +2927,454 @@ def set_system_state(payload: dict, request: Request):
         return {'ok': False, 'error': str(exc)}
 
 
+# ============================================================
+# 人格塑造、习惯养成、行为追踪系统 API
+# ============================================================
+
+# Pydantic 模型
+class BehaviorRegulateRequest(BaseModel):
+    task: str = Field(min_length=1, max_length=500)
+    energy_level: int = Field(default=3, ge=1, le=5)
+    motivation: int = Field(default=5, ge=1, le=10)
+
+
+class HabitCreateRequest(BaseModel):
+    habit_name: str = Field(min_length=1, max_length=200)
+    anchor: str = Field(default='', max_length=200)
+    energy_level: int = Field(default=3, ge=1, le=5)
+
+
+class HabitExecuteRequest(BaseModel):
+    habit_id: str = Field(min_length=1)
+    energy_level: int = Field(default=3, ge=1, le=5)
+
+
+class HabitLogRequest(BaseModel):
+    habit_id: str = Field(min_length=1)
+    tier_executed: str = Field(default='Yellow')
+    was_completed: bool = Field(default=False)
+    completion_percentage: int = Field(default=0, ge=0, le=100)
+    mood_before: int = Field(default=5, ge=1, le=10)
+    mood_after: int = Field(default=5, ge=1, le=10)
+
+
+# ── 行为调节系统 API ─────────────────────────────────────────
+
+@app.post('/api/behavior/regulate')
+def behavior_regulate(payload: BehaviorRegulateRequest, request: Request):
+    """
+    行为调节引擎 - 动态行为工程学
+    基于当前能量和动机水平，推荐最小可执行动作
+    """
+    try:
+        from backend.habit_behavior_engine import regulate_behavior
+        result = regulate_behavior(payload.task, payload.energy_level)
+        return result
+    except Exception as exc:
+        print(f'[behavior_regulate] Failed: {exc}', flush=True)
+        tier = "Red" if payload.energy_level <= 2 else ("Yellow" if payload.energy_level <= 3 else "Green")
+        return {
+            "degraded": True,
+            "selected_tier": tier,
+            "min_executable_action": f"尝试{payload.task}的最小版本" if tier == "Red" else f"开始{payload.task}",
+            "emotional_compensation": "系统智能降级，保持连续性",
+            "continuity_advice": "任何微小启动都算成功"
+        }
+
+
+@app.get('/api/behavior/history')
+def get_behavior_history(user_id: str = None, limit: int = 30, request: Request = None):
+    """获取用户的行为调节历史"""
+    user = _require_user(request)
+    target_user_id = user_id or user['id']
+    
+    if target_user_id != user['id']:
+        raise HTTPException(status_code=403, detail='只能查看自己的数据')
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, task, energy_level, motivation, tier_executed,
+                          min_executable_action, was_completed, completion_percentage,
+                          started_at
+                   FROM behavior_regulation_sessions 
+                   WHERE user_id = %s
+                   ORDER BY started_at DESC
+                   LIMIT %s''',
+                (target_user_id, limit)
+            )
+            rows = cur.fetchall()
+            
+            items = [{
+                'id': str(r[0]),
+                'task': r[1],
+                'energy_level': r[2],
+                'motivation': r[3],
+                'tier_executed': r[4],
+                'min_executable_action': r[5],
+                'was_completed': r[6],
+                'completion_percentage': r[7],
+                'executed_at': r[8].isoformat() if r[8] else None,
+            } for r in rows]
+            
+        return {'items': items, 'count': len(items)}
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/behavior/stats')
+def get_behavior_stats(user_id: str = None, request: Request = None):
+    """获取用户的行为调节统计"""
+    user = _require_user(request)
+    target_user_id = user_id or user['id']
+    
+    if target_user_id != user['id']:
+        raise HTTPException(status_code=403, detail='只能查看自己的数据')
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            # 总体统计
+            cur.execute(
+                '''SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN was_completed THEN 1 ELSE 0 END) as completed,
+                    AVG(completion_percentage) as avg_completion,
+                    AVG(energy_level) as avg_energy
+                   FROM behavior_regulation_sessions 
+                   WHERE user_id = %s''',
+                (target_user_id,)
+            )
+            row = cur.fetchone()
+            
+            total_regulations = row[0] or 0
+            completed_regulations = row[1] or 0
+            avg_completion_percentage = round(row[2] or 0, 1)
+            avg_energy_level = round(row[3] or 3, 1)
+            
+            # 层级分布
+            cur.execute(
+                '''SELECT tier_executed, COUNT(*) 
+                   FROM behavior_regulation_sessions 
+                   WHERE user_id = %s
+                   GROUP BY tier_executed''',
+                (target_user_id,)
+            )
+            tier_distribution = {r[0]: r[1] for r in cur.fetchall()}
+            
+            # 最近7天统计
+            cur.execute(
+                '''SELECT COUNT(*) 
+                   FROM behavior_regulation_sessions 
+                   WHERE user_id = %s AND started_at > NOW() - INTERVAL '7 days' ''',
+                (target_user_id,)
+            )
+            last_7_days = cur.fetchone()[0] or 0
+            
+        return {
+            'total_regulations': total_regulations,
+            'completed_regulations': completed_regulations,
+            'completion_rate': round((completed_regulations / total_regulations * 100), 1) if total_regulations > 0 else 0,
+            'avg_completion_percentage': avg_completion_percentage,
+            'avg_energy_level': avg_energy_level,
+            'tier_distribution': tier_distribution,
+            'last_7_days_regulations': last_7_days
+        }
+    finally:
+        _release_db(conn)
+
+
+# ── 习惯养成状态机 API ───────────────────────────────────────
+
+@app.post('/api/habits/create')
+def create_habit_api(payload: HabitCreateRequest, request: Request):
+    """
+    创建习惯状态机 - 三层动态电路保护
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    try:
+        from backend.habit_behavior_engine import create_habit
+        result = create_habit(payload.habit_name, payload.anchor, payload.energy_level)
+        
+        # 保存到数据库
+        conn = _get_db()
+        try:
+            with conn.cursor() as cur:
+                fsm_config = result.get('habit_config', {})
+                cur.execute(
+                    '''INSERT INTO habit_state_machines 
+                       (user_id, habit_name, deterministic_anchor, 
+                        tier_green_config, tier_yellow_config, tier_red_config,
+                        token_green_yield, token_yellow_yield, token_red_yield)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       RETURNING id''',
+                    (user_id, payload.habit_name, fsm_config.get('deterministic_anchor', ''),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('green', {})),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('yellow', {})),
+                     json.dumps(fsm_config.get('tier_configs', {}).get('red', {})),
+                     10, 5, 1)
+                )
+                row = cur.fetchone()
+                conn.commit()
+                result['saved_habit_id'] = str(row[0])
+        finally:
+            _release_db(conn)
+        
+        return result
+        
+    except Exception as exc:
+        print(f'[habits_create] Failed: {exc}', flush=True)
+        raise HTTPException(status_code=500, detail='创建习惯失败')
+
+
+@app.get('/api/habits')
+def list_habits(request: Request):
+    """获取用户的习惯列表"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, habit_name, deterministic_anchor, is_active,
+                          current_streak_days, total_executions, last_execution_at,
+                          tier_green_config, tier_yellow_config, tier_red_config
+                   FROM habit_state_machines 
+                   WHERE user_id = %s AND is_active = TRUE
+                   ORDER BY created_at DESC''',
+                (user_id,)
+            )
+            rows = cur.fetchall()
+            
+            items = [{
+                'id': str(r[0]),
+                'habit_name': r[1],
+                'anchor': r[2],
+                'is_active': r[3],
+                'current_streak': r[4],
+                'total_executions': r[5],
+                'last_execution': r[6].isoformat() if r[6] else None,
+                'tier_configs': {
+                    'green': r[7],
+                    'yellow': r[8],
+                    'red': r[9]
+                }
+            } for r in rows]
+            
+            return {'items': items, 'total': len(items)}
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/habits/{habit_id}/execute')
+def execute_habit(habit_id: str, payload: HabitExecuteRequest, request: Request):
+    """
+    执行习惯状态机 - 根据当前能量动态选择层级
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        # 获取习惯配置
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT habit_name, deterministic_anchor,
+                          tier_green_config, tier_yellow_config, tier_red_config
+                   FROM habit_state_machines 
+                   WHERE id = %s AND user_id = %s''',
+                (habit_id, user_id)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail='习惯未找到')
+            
+            habit_config = {
+                'habit_name': row[0],
+                'deterministic_anchor': row[1],
+                'tier_configs': {
+                    'green': row[2],
+                    'yellow': row[3],
+                    'red': row[4]
+                }
+            }
+        
+        # 执行状态机
+        from backend.habit_behavior_engine import habit_fsm
+        execution = habit_fsm.execute_habit(habit_config, payload.energy_level)
+        
+        return execution.to_dict()
+        
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/habits/{habit_id}/log')
+def log_habit_execution(habit_id: str, payload: HabitLogRequest, request: Request):
+    """
+    记录习惯执行结果，更新代币和连胜
+    """
+    user = _require_user(request)
+    user_id = user['id']
+    
+    # 代币计算
+    tier_tokens = {'Green': 10, 'Yellow': 5, 'Red': 1}
+    tokens_earned = tier_tokens.get(payload.tier_executed, 5)
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            # 记录执行日志
+            cur.execute(
+                '''INSERT INTO habit_execution_logs 
+                   (user_id, habit_id, energy_level_at_execution, selected_tier,
+                    tokens_earned, was_completed, completion_percentage,
+                    circuit_breaker_triggered, mood_before, mood_after)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id''',
+                (user_id, habit_id, 3, payload.tier_executed,
+                 tokens_earned, payload.was_completed, payload.completion_percentage,
+                 payload.tier_executed == 'Red',
+                 payload.mood_before, payload.mood_after)
+            )
+            log_id = cur.fetchone()[0]
+            
+            # 更新习惯统计
+            if payload.was_completed:
+                cur.execute(
+                    '''UPDATE habit_state_machines 
+                       SET total_executions = total_executions + 1,
+                           last_execution_at = NOW(),
+                           current_streak_days = CASE 
+                               WHEN last_execution_at >= CURRENT_DATE - INTERVAL '1 day' 
+                               THEN current_streak_days + 1 
+                               ELSE 1 
+                           END
+                       WHERE id = %s''',
+                    (habit_id,)
+                )
+            
+            # 更新代币账本
+            cur.execute(
+                '''INSERT INTO user_token_ledgers (user_id, current_balance, lifetime_earned)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (user_id) 
+                   DO UPDATE SET 
+                       current_balance = user_token_ledgers.current_balance + %s,
+                       lifetime_earned = user_token_ledgers.lifetime_earned + %s,
+                       last_updated = NOW()''',
+                (user_id, tokens_earned, tokens_earned, tokens_earned, tokens_earned)
+            )
+            
+            # 记录代币交易
+            cur.execute(
+                '''INSERT INTO token_transactions 
+                   (user_id, transaction_type, amount, balance_after, habit_id, habit_log_id, description)
+                   VALUES (%s, %s, %s, 
+                       (SELECT current_balance FROM user_token_ledgers WHERE user_id = %s),
+                       %s, %s, %s)''',
+                (user_id, 'earn', tokens_earned, user_id, 
+                 habit_id, log_id, f'{payload.tier_executed} tier execution')
+            )
+            
+            conn.commit()
+            
+            return {
+                'ok': True,
+                'log_id': str(log_id),
+                'tokens_earned': tokens_earned,
+                'circuit_breaker_triggered': payload.tier_executed == 'Red',
+                'anti_guilt_message': '系统已切换至保护模式。连胜保持。核心控制回路完整性100%。' 
+                    if payload.tier_executed == 'Red' else None
+            }
+            
+    finally:
+        _release_db(conn)
+
+
+@app.get('/api/habits/dashboard')
+def habits_dashboard(request: Request):
+    """习惯系统仪表盘"""
+    user = _require_user(request)
+    user_id = user['id']
+    
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT active_habits, today_executions, max_current_streak,
+                          token_balance, last_habit_name, circuit_breaker_count
+                   FROM user_habit_dashboard 
+                   WHERE user_id = %s''',
+                (user_id,)
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                return {
+                    'active_habits': 0,
+                    'today_executions': 0,
+                    'current_streak': 0,
+                    'token_balance': 0,
+                    'circuit_breaker_count': 0
+                }
+            
+            return {
+                'active_habits': row[0] or 0,
+                'today_executions': row[1] or 0,
+                'current_streak': row[2] or 0,
+                'token_balance': row[3] or 0,
+                'last_habit_name': row[4],
+                'circuit_breaker_count': row[5] or 0
+            }
+    finally:
+        _release_db(conn)
+
+
+# ── 人格塑造 API ─────────────────────────────────────────────
+
+@app.get('/api/formation/profile')
+def get_formation_profile(user_id: str = None, request: Request = None):
+    """获取人格塑造档案"""
+    user = _require_user(request)
+    target_user_id = user_id or user['id']
+    
+    if target_user_id != user['id']:
+        raise HTTPException(status_code=403, detail='只能查看自己的数据')
+    
+    try:
+        from backend.formation_engine import get_formation_engine
+        engine = get_formation_engine()
+        # Use sync version since we're in sync context
+        import asyncio
+        profile = asyncio.run(engine.get_profile(target_user_id))
+        return profile
+    except Exception as exc:
+        print(f'[formation_profile] Failed: {exc}', flush=True)
+        # Return baseline profile on error
+        return {
+            'user_id': target_user_id,
+            'schema': 'v3.1',
+            'state_vector': {
+                'humility': 0.5, 'fear_tendency': 0.5, 'pride_tendency': 0.5,
+                'emotional_stability': 0.5, 'truth_alignment': 0.5,
+                'relational_health': 0.5, 'resilience': 0.5, 'inner_clarity': 0.5
+            },
+            'formation_arc': 'unknown',
+            'trajectory_direction': 'unknown',
+            'dominant_loop': 'none',
+            'alignment_trend': 'stable',
+            'current_trajectory': 'not yet determined',
+            'data_points': 0,
+            'note': 'Formation tracking begins with your first decision analysis.'
+        }
+
+
 # ── 前端静态文件（SPA 回退）────────────────────────────────────
 
 if FRONTEND_DIST.exists():

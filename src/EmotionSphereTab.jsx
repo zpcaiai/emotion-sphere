@@ -11,6 +11,7 @@ import StoryCard from './StoryCard'
 import PsychologyPanel from './PsychologyPanel'
 import ExecutionPanel from './ExecutionPanel'
 import DecisionSupportPage from './DecisionSupportPage'
+import HabitsPage from './HabitsPage'
 const VISITOR_ID_KEY = 'bible-sphere-visitor-id'
 
 function getOrCreateVisitorId() {
@@ -144,6 +145,7 @@ export default function EmotionSphereTab() {
   const [showPsychology, setShowPsychology] = useState(false)
   const [showExecution, setShowExecution] = useState(false)
   const [showDecisionSupport, setShowDecisionSupport] = useState(false)
+  const [showHabits, setShowHabits] = useState(false)
         
   // 语音输入相关状态
   const [isRecording, setIsRecording] = useState(false)
@@ -1282,6 +1284,11 @@ export default function EmotionSphereTab() {
                           style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff'}}>
                     🎯 决策支持
                   </button>
+                  <button className="segment habits-btn" type="button"
+                          onClick={() => setShowHabits(true)}
+                          style={{background: 'linear-gradient(135deg, #34c759 0%, #30d158 100%)', color: '#fff'}}>
+                    🌱 习惯养成
+                  </button>
                 </div>
               </section>
               <section className="mobile-card glass stats-gradient">
@@ -1343,6 +1350,19 @@ export default function EmotionSphereTab() {
               ✕ 关闭
             </button>
             <DecisionSupportPage user={user} onBack={() => setShowDecisionSupport(false)} embedded={true} />
+          </div>
+        </div>
+      )}
+      {showHabits && (
+        <div className="psychology-overlay">
+          <div className="psychology-modal" style={{maxWidth: '500px', width: '95%', maxHeight: '90vh', overflow: 'auto'}}>
+            <button 
+              className="close-psychology-btn"
+              onClick={() => setShowHabits(false)}
+            >
+              ✕ 关闭
+            </button>
+            <HabitsPage user={user} embedded={true} />
           </div>
         </div>
       )}

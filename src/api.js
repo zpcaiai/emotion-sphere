@@ -1063,3 +1063,50 @@ export async function completeMicroSession(sessionId, outcome, reflection, token
   console.log(`[api] completeMicroSession ok=${data.success}`)
   return data
 }
+
+// 人格塑造、习惯养成、行为追踪 API 已在上方定义（行为调节/习惯/人格档案/行为历史/行为统计）
+
+export async function fetchFormationProfile(userId, token) {
+  console.log(`[api] fetchFormationProfile user=${userId}`)
+  const response = await fetch(`${API_BASE}/formation/profile?user_id=${userId}`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '获取人格档案失败')
+  console.log(`[api] fetchFormationProfile ok`)
+  return data
+}
+
+export async function fetchBehaviorHistory(userId, token, limit = 30) {
+  console.log(`[api] fetchBehaviorHistory user=${userId}`)
+  const response = await fetch(`${API_BASE}/behavior/history?user_id=${userId}&limit=${limit}`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '获取行为历史失败')
+  console.log(`[api] fetchBehaviorHistory ok count=${data.items?.length || 0}`)
+  return data
+}
+
+export async function fetchBehaviorStats(userId, token) {
+  console.log(`[api] fetchBehaviorStats user=${userId}`)
+  const response = await fetch(`${API_BASE}/behavior/stats?user_id=${userId}`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+  })
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('后端服务未运行')
+  }
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.detail || data.error || '获取行为统计失败')
+  console.log(`[api] fetchBehaviorStats ok`)
+  return data
+}
