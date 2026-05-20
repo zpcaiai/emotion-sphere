@@ -2966,9 +2966,32 @@ def behavior_regulate(payload: BehaviorRegulateRequest, request: Request):
     行为调节引擎 - 动态行为工程学
     基于当前能量和动机水平，推荐最小可执行动作
     """
+    user = _require_user(request)
     try:
         from backend.habit_behavior_engine import regulate_behavior
         result = regulate_behavior(payload.task, payload.energy_level)
+
+        # 保存行为调节会话到数据库
+        conn = _get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''INSERT INTO behavior_regulation_sessions
+                       (user_id, session_type, target_habit, motivation_level,
+                        energy_level, selected_tier, min_executable_action,
+                        task_downgrade, emotional_compensation, continuity_advice)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                    (user['id'], 'habit_task', payload.task, payload.motivation,
+                     payload.energy_level, result.get('selected_tier'),
+                     result.get('min_executable_action'),
+                     result.get('task_downgrade'),
+                     result.get('emotional_compensation'),
+                     result.get('continuity_advice'))
+                )
+                conn.commit()
+        finally:
+            _release_db(conn)
+
         return result
     except Exception as exc:
         print(f'[behavior_regulate] Failed: {exc}', flush=True)
@@ -2995,7 +3018,7 @@ def get_behavior_history(user_id: str = None, limit: int = 30, request: Request 
     try:
         with conn.cursor() as cur:
             cur.execute(
-                '''SELECT id, task, energy_level, motivation, tier_executed,
+                '''SELECT id, target_habit, energy_level, motivation_level, selected_tier,
                           min_executable_action, was_completed, completion_percentage,
                           started_at
                    FROM behavior_regulation_sessions 
@@ -3055,10 +3078,10 @@ def get_behavior_stats(user_id: str = None, request: Request = None):
             
             # 层级分布
             cur.execute(
-                '''SELECT tier_executed, COUNT(*) 
+                '''SELECT selected_tier, COUNT(*) 
                    FROM behavior_regulation_sessions 
                    WHERE user_id = %s
-                   GROUP BY tier_executed''',
+                   GROUP BY selected_tier''',
                 (target_user_id,)
             )
             tier_distribution = {r[0]: r[1] for r in cur.fetchall()}
@@ -3339,7 +3362,7 @@ def habits_dashboard(request: Request):
 # ── 人格塑造 API ─────────────────────────────────────────────
 
 @app.get('/api/formation/profile')
-def get_formation_profile(user_id: str = None, request: Request = None):
+async def get_formation_profile(user_id: str = None, request: Request = None):
     """获取人格塑造档案"""
     user = _require_user(request)
     target_user_id = user_id or user['id']
@@ -3350,9 +3373,7 @@ def get_formation_profile(user_id: str = None, request: Request = None):
     try:
         from backend.formation_engine import get_formation_engine
         engine = get_formation_engine()
-        # Use sync version since we're in sync context
-        import asyncio
-        profile = asyncio.run(engine.get_profile(target_user_id))
+        profile = await engine.get_profile(target_user_id)
         return profile
     except Exception as exc:
         print(f'[formation_profile] Failed: {exc}', flush=True)

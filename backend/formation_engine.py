@@ -1060,6 +1060,19 @@ class FormationEngine:
             conn = self._db_pool.getconn()
             try:
                 with conn.cursor() as cur:
+                    # Check if formation_metrics table exists
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_schema = 'public' 
+                            AND table_name = 'formation_metrics'
+                        )
+                        """
+                    )
+                    if not cur.fetchone()[0]:
+                        return []
+
                     cur.execute(
                         """
                         SELECT
@@ -1076,6 +1089,9 @@ class FormationEngine:
                     )
                     cols = [d[0] for d in cur.description]
                     return [dict(zip(cols, row)) for row in cur.fetchall()]
+            except Exception as exc:
+                logger.warning("[formation] DB query failed: %s", exc)
+                return []
             finally:
                 self._db_pool.putconn(conn)
 

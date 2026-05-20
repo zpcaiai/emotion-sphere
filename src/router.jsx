@@ -16,6 +16,7 @@ const MicroMomentumPanel = lazy(() => import('./MicroMomentumPanel'))
 const LoginScreen = lazy(() => import('./LoginScreen'))
 const StoryCard = lazy(() => import('./StoryCard'))
 const DecisionSupportPage = lazy(() => import('./DecisionSupportPage'))
+const HabitsPage = lazy(() => import('./HabitsPage'))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -90,6 +91,10 @@ export const router = createBrowserRouter([
       {
         path: 'decision-support',
         element: <DecisionSupportPage />
+      },
+      {
+        path: 'habits',
+        element: <HabitsPage />
       },
       {
         path: 'login',
