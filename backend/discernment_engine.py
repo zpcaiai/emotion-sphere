@@ -276,6 +276,10 @@ class DiscernmentEngine:
                 "决策与即时满足或欲望有较强关联。冲动的声音往往很急迫，但不代表正确。",
                 "问问自己：如果没有任何舒适考量，我会怎么选？",
             ],
+            SourceType.CONSCIENCE: [
+                "这个决定似乎基于责任感或道德考虑。这是一种成熟的价值导向。",
+                "但也要注意：过度的责任驱动可能导致自我牺牲，失去平衡。",
+            ],
             SourceType.MIXED: [
                 "动机分析显示出复杂的混合——既有值得肯定的面向，也有需要警觉的因素。这种复杂性是人性常态。",
                 "没有单一主导动机，这种情况更需要谨慎和时间的检验。",
@@ -321,6 +325,18 @@ class DiscernmentEngine:
             SourceType.TRAUMA: [
                 "但也可以理解为：过往经历给了您独特的洞察力。",
                 "另一个可能：这次情况与过去不同，您的警觉可能过度了。",
+            ],
+            SourceType.SOCIAL_PRESSURE: [
+                "另一种视角：考虑社会因素是成熟的表现，平衡个人与社会需求。",
+                "也值得考虑：如果完全不在乎他人看法，这个决定是否依然成立？",
+            ],
+            SourceType.IMPULSE: [
+                "另一个角度：直觉有时比理性更快捕捉真实需求。",
+                "但也要小心：冲动的决定往往带来短期满足，长期后悔。",
+            ],
+            SourceType.CONSCIENCE: [
+                '但也要觉察："良心"有时被内疚感或应该思维污染。',
+                "另一个视角：听从内心的同时，也要考虑现实后果。",
             ],
         }
         
@@ -399,6 +415,29 @@ class DiscernmentEngine:
             })
             score += 1
         
+        if primary == SourceType.SOCIAL_PRESSURE:
+            risks.append({
+                "factor": "社会压力驱动",
+                "message": "过度考虑他人看法可能导致违背内心真实需求。",
+                "recommendation": "区分合理的社会责任与过度在意他人评价。",
+            })
+            score += 1
+        
+        if primary == SourceType.IMPULSE:
+            risks.append({
+                "factor": "冲动欲望驱动",
+                "message": "即时满足导向的决策往往忽视长期后果。",
+                "recommendation": "设置72小时冷静期，观察欲望强度是否变化。",
+            })
+            score += 2
+        
+        if primary == SourceType.CONSCIENCE:
+            risks.append({
+                "factor": "过度责任驱动",
+                "message": "基于道德/责任的决定可能导致自我牺牲过度。",
+                "recommendation": "检查是否忽视了自己的合理需求，寻求平衡点。",
+            })
+        
         if decision.importance_level >= 4 and primary == SourceType.UNCERTAIN:
             risks.append({
                 "factor": "重要但方向不明",
@@ -434,6 +473,14 @@ class DiscernmentEngine:
             reflections.append('练习说出"我不知道"和"我需要帮助"，打破自我证明的循环。')
         elif primary == SourceType.UNCERTAIN:
             reflections.append('不要急于"制造"确定性。拥抱"尚未清楚"也是一种智慧。')
+        elif primary == SourceType.SOCIAL_PRESSURE:
+            reflections.append("列出做这个决定的3个真正内在动机，与外在认可无关的。")
+        elif primary == SourceType.IMPULSE:
+            reflections.append("给自己72小时冷静期，观察欲望是否依然强烈。")
+        elif primary == SourceType.CONSCIENCE:
+            reflections.append("检查是否过度牺牲自己的需求，健康的责任需要平衡。")
+        elif primary == SourceType.TRAUMA:
+            reflections.append("寻求专业支持或与信任的人分享，创伤反应需要被倾听。")
         
         if risk in [RiskLevel.ELEVATED, RiskLevel.HIGH]:
             reflections.append("由于当前风险因素，建议优先考虑情绪/心理健康，而非急于做决定。")
