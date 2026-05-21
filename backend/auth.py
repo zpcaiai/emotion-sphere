@@ -784,3 +784,414 @@ def email_reset_password(request: Request, payload: EmailResetPasswordRequest):
                     details={}, success=True)
     print(f'[auth] password reset ok email={email}', flush=True)
     return {'ok': True, 'message': 'Password reset successfully, please login with new password'}
+
+
+# ── 微信 OAuth 登录 ────────────────────────────────────────────
+
+class WechatLoginRequest(BaseModel):
+    code: str = Field(min_length=1, description='微信登录凭证 code')
+    platform: str = Field(default='miniprogram', description='miniprogram 或 official')
+    nickname: str = Field(default='', max_length=100)
+    avatar: str = Field(default='', max_length=500)
+
+
+def _get_user_by_openid(openid: str, platform: str = 'wechat_miniprogram') -> dict | None:
+    """通过 openid 和平台查找用户（优先查 oauth_bindings，再查 users）"""
+    conn = _get_db()
+    try:
+        # 先查 oauth_bindings 表
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT u.id, u.email, u.nickname, u.avatar, u.login_type, u.created_at,
+                          ob.platform_uid, ob.platform_unionid
+                   FROM user_oauth_bindings ob
+                   JOIN users u ON u.id = ob.user_id
+                   WHERE ob.platform = %s AND ob.platform_uid = %s''',
+                (platform, openid)
+            )
+            row = cur.fetchone()
+            if row:
+                return {
+                    'id': row[0], 'email': row[1], 'nickname': row[2],
+                    'avatar': row[3], 'login_type': row[4],
+                    'created_at': row[5].timestamp() if row[5] else None,
+                    'openid': row[6], 'unionid': row[7],
+                }
+        # 兼容旧版：直接查 users 表的 openid 字段
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, email, nickname, avatar, openid, unionid,
+                          login_type, created_at
+                   FROM users WHERE openid = %s''',
+                (openid,)
+            )
+            row = cur.fetchone()
+            if row:
+                return {
+                    'id': row[0], 'email': row[1], 'nickname': row[2],
+                    'avatar': row[3], 'openid': row[4], 'unionid': row[5],
+                    'login_type': row[6],
+                    'created_at': row[7].timestamp() if row[7] else None,
+                }
+        return None
+    finally:
+        _release_db(conn)
+
+
+def _create_oauth_user(
+    platform: str,
+    platform_uid: str,
+    platform_unionid: str = '',
+    nickname: str = '',
+    avatar: str = '',
+    platform_data: dict = None
+) -> dict:
+    """创建 OAuth 用户并绑定到 oauth_bindings 表"""
+    conn = _get_db()
+    try:
+        # 1. 创建 users 记录
+        with conn.cursor() as cur:
+            # 生成临时邮箱：wx_{openid}@wechat.local
+            temp_email = f'{platform}_{platform_uid[:16]}@oauth.local'
+            cur.execute(
+                '''INSERT INTO users (email, nickname, avatar, openid, login_type, password_hash)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   RETURNING id''',
+                (temp_email, nickname or '用户'+platform_uid[-6:], avatar,
+                 platform_uid, platform, '')
+            )
+            user_id = cur.fetchone()[0]
+
+        # 2. 创建 oauth_bindings 记录
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO user_oauth_bindings
+                   (user_id, platform, platform_uid, platform_unionid,
+                    platform_data, is_primary)
+                   VALUES (%s, %s, %s, %s, %s, TRUE)''',
+                (user_id, platform, platform_uid, platform_unionid,
+                 json.dumps(platform_data or {}))
+            )
+        conn.commit()
+
+        return {
+            'id': user_id,
+            'email': temp_email,
+            'nickname': nickname or '微信用户',
+            'avatar': avatar,
+            'openid': platform_uid,
+            'unionid': platform_unionid,
+            'login_type': platform,
+            'created_at': time.time(),
+        }
+    finally:
+        _release_db(conn)
+
+
+def _update_user_openid(user_id: int, openid: str, unionid: str = '', platform: str = 'wechat_miniprogram'):
+    """更新用户 openid/unionid（兼容旧版）"""
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''UPDATE users SET openid = %s, unionid = %s, login_type = %s
+                   WHERE id = %s''',
+                (openid, unionid, platform, user_id)
+            )
+            conn.commit()
+    finally:
+        _release_db(conn)
+
+
+@router.post('/wechat/login')
+def wechat_login(request: Request, payload: WechatLoginRequest):
+    """
+    微信小程序 code2session 登录。
+    流程：前端 wx.login() 获取 code → 传给后端换取 openid/session_key。
+    """
+    client_ip = request.client.host if request.client else 'unknown'
+    print(f'[auth] wechat login platform={payload.platform} code={payload.code[:8]}...', flush=True)
+
+    if not WX_APP_ID or not WX_APP_SECRET:
+        raise HTTPException(status_code=503, detail='WeChat login not configured')
+
+    # 1. 调用微信 code2session
+    try:
+        resp = httpx.get(
+            'https://api.weixin.qq.com/sns/jscode2session',
+            params={
+                'appid': WX_APP_ID,
+                'secret': WX_APP_SECRET,
+                'js_code': payload.code,
+                'grant_type': 'authorization_code'
+            },
+            timeout=10
+        )
+        wx_data = resp.json()
+    except Exception as exc:
+        print(f'[auth] wechat code2session failed: {exc}', flush=True)
+        raise HTTPException(status_code=502, detail='WeChat API error')
+
+    if 'openid' not in wx_data:
+        print(f'[auth] wechat error: {wx_data}', flush=True)
+        raise HTTPException(status_code=400, detail=wx_data.get('errmsg', 'WeChat login failed'))
+
+    openid = wx_data['openid']
+    unionid = wx_data.get('unionid', '')
+    session_key = wx_data.get('session_key', '')
+
+    platform = f"wechat_{payload.platform}"  # wechat_miniprogram / wechat_official
+
+    # 2. 查找或创建用户
+    user_record = _get_user_by_openid(openid, platform)
+
+    if not user_record:
+        # 新用户：创建
+        user_record = _create_oauth_user(
+            platform=platform,
+            platform_uid=openid,
+            platform_unionid=unionid,
+            nickname=payload.nickname,
+            avatar=payload.avatar,
+            platform_data={'session_key': session_key, 'raw': wx_data}
+        )
+        _security_audit('REGISTER_SUCCESS', email=user_record['email'], ip=client_ip,
+                        details={'platform': platform, 'openid': openid[:8]}, success=True)
+        print(f'[auth] wechat new user created id={user_record["id"]}', flush=True)
+    else:
+        # 老用户：可选更新信息
+        if payload.nickname and not user_record.get('nickname'):
+            conn = _get_db()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'UPDATE users SET nickname = %s WHERE id = %s',
+                        (payload.nickname, user_record['id'])
+                    )
+                    conn.commit()
+                    user_record['nickname'] = payload.nickname
+            finally:
+                _release_db(conn)
+        _security_audit('LOGIN_SUCCESS', email=user_record.get('email'), ip=client_ip,
+                        details={'platform': platform, 'openid': openid[:8]}, success=True)
+        print(f'[auth] wechat login ok id={user_record["id"]}', flush=True)
+
+    # 3. 创建 session
+    public = {k: v for k, v in user_record.items() if k != 'password_hash'}
+    token = _make_session(public)
+
+    return {
+        'ok': True,
+        'token': token,
+        'user': public,
+        'is_new': 'created_at' in public and (time.time() - public['created_at']) < 5
+    }
+
+
+# ── 小红书 OAuth 登录 ─────────────────────────────────────────
+
+# 小红书配置
+XHS_APP_ID = os.getenv('XHS_APP_ID', '')
+XHS_APP_SECRET = os.getenv('XHS_APP_SECRET', '')
+
+
+class XiaohongshuLoginRequest(BaseModel):
+    code: str = Field(min_length=1, description='小红书授权码')
+    nickname: str = Field(default='', max_length=100)
+    avatar: str = Field(default='', max_length=500)
+
+
+@router.post('/xiaohongshu/login')
+def xiaohongshu_login(request: Request, payload: XiaohongshuLoginRequest):
+    """
+    小红书 OAuth 登录。
+    流程：前端获取授权 code → 后端用 code 换 access_token → 获取用户信息。
+    """
+    client_ip = request.client.host if request.client else 'unknown'
+    print(f'[auth] xiaohongshu login code={payload.code[:8]}...', flush=True)
+
+    if not XHS_APP_ID or not XHS_APP_SECRET:
+        raise HTTPException(status_code=503, detail='Xiaohongshu login not configured')
+
+    # 1. 用 code 换 access_token
+    try:
+        token_resp = httpx.post(
+            'https://open.xiaohongshu.com/api/erp/auth/token',
+            json={
+                'app_id': XHS_APP_ID,
+                'app_secret': XHS_APP_SECRET,
+                'grant_type': 'authorization_code',
+                'code': payload.code
+            },
+            timeout=10
+        )
+        token_data = token_resp.json()
+    except Exception as exc:
+        print(f'[auth] xiaohongshu token request failed: {exc}', flush=True)
+        raise HTTPException(status_code=502, detail='Xiaohongshu API error')
+
+    if 'access_token' not in token_data:
+        print(f'[auth] xiaohongshu token error: {token_data}', flush=True)
+        raise HTTPException(status_code=400, detail=token_data.get('error_msg', 'Xiaohongshu login failed'))
+
+    access_token = token_data['access_token']
+    refresh_token = token_data.get('refresh_token', '')
+    expires_in = token_data.get('expires_in', 7200)
+
+    # 2. 获取用户信息
+    try:
+        user_resp = httpx.get(
+            'https://open.xiaohongshu.com/api/erp/user/info',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10
+        )
+        xhs_user = user_resp.json()
+    except Exception as exc:
+        print(f'[auth] xiaohongshu user info failed: {exc}', flush=True)
+        raise HTTPException(status_code=502, detail='Failed to get user info')
+
+    if 'user_id' not in xhs_user:
+        raise HTTPException(status_code=400, detail='Failed to get xiaohongshu user id')
+
+    xhs_user_id = str(xhs_user['user_id'])
+    xhs_nickname = xhs_user.get('nickname', '') or payload.nickname
+    xhs_avatar = xhs_user.get('avatar', '') or payload.avatar
+
+    platform = 'xiaohongshu'
+
+    # 3. 查找或创建用户
+    user_record = _get_user_by_openid(xhs_user_id, platform)
+
+    if not user_record:
+        user_record = _create_oauth_user(
+            platform=platform,
+            platform_uid=xhs_user_id,
+            nickname=xhs_nickname,
+            avatar=xhs_avatar,
+            platform_data={
+                'raw_user': xhs_user,
+                'token_response': {k: v for k, v in token_data.items() if k != 'access_token'}
+            }
+        )
+        # 保存 token 到 oauth_bindings
+        conn = _get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''UPDATE user_oauth_bindings
+                       SET access_token = %s,
+                           refresh_token = %s,
+                           token_expires_at = NOW() + INTERVAL '%s seconds'
+                       WHERE user_id = %s AND platform = %s''',
+                    (access_token, refresh_token, str(int(expires_in)),
+                     user_record['id'], platform)
+                )
+                conn.commit()
+        finally:
+            _release_db(conn)
+
+        _security_audit('REGISTER_SUCCESS', email=user_record['email'], ip=client_ip,
+                        details={'platform': platform, 'xhs_id': xhs_user_id[:8]}, success=True)
+        print(f'[auth] xiaohongshu new user created id={user_record["id"]}', flush=True)
+    else:
+        # 更新 token
+        conn = _get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''UPDATE user_oauth_bindings
+                       SET access_token = %s,
+                           refresh_token = %s,
+                           token_expires_at = NOW() + INTERVAL '%s seconds',
+                           platform_data = %s,
+                           updated_at = NOW()
+                       WHERE user_id = %s AND platform = %s''',
+                    (access_token, refresh_token, str(int(expires_in)),
+                     json.dumps(xhs_user),
+                     user_record['id'], platform)
+                )
+                conn.commit()
+            if xhs_nickname and not user_record.get('nickname'):
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'UPDATE users SET nickname = %s WHERE id = %s',
+                        (xhs_nickname, user_record['id'])
+                    )
+                    conn.commit()
+                    user_record['nickname'] = xhs_nickname
+        finally:
+            _release_db(conn)
+
+        _security_audit('LOGIN_SUCCESS', email=user_record.get('email'), ip=client_ip,
+                        details={'platform': platform, 'xhs_id': xhs_user_id[:8]}, success=True)
+        print(f'[auth] xiaohongshu login ok id={user_record["id"]}', flush=True)
+
+    # 4. 创建 session
+    public = {k: v for k, v in user_record.items() if k != 'password_hash'}
+    token = _make_session(public)
+
+    return {
+        'ok': True,
+        'token': token,
+        'user': public,
+        'is_new': 'created_at' in public and (time.time() - public['created_at']) < 5
+    }
+
+
+# ── 绑定/解绑 OAuth 账号 ────────────────────────────────────
+
+class BindOAuthRequest(BaseModel):
+    platform: str = Field(..., description='wechat_miniprogram / wechat_official / xiaohongshu')
+    code: str = Field(..., description='平台授权码')
+
+
+@router.post('/oauth/bind')
+def bind_oauth_account(request: Request, payload: BindOAuthRequest):
+    """为当前登录用户绑定新的 OAuth 账号"""
+    from backend.auth import get_session_user
+    user = get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail='请先登录')
+    user_id = int(user['id'])
+
+    # TODO: 实现绑定逻辑（类似登录，但关联到已存在的 user_id）
+    # 这里需要根据具体平台调用相应接口获取 platform_uid
+    # 然后 INSERT INTO user_oauth_bindings ...
+
+    return {'ok': True, 'message': '绑定功能开发中，请使用单一平台登录'}
+
+
+@router.get('/oauth/bindings')
+def list_oauth_bindings(request: Request):
+    """获取当前用户的所有 OAuth 绑定"""
+    from backend.auth import get_session_user
+    user = get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail='请先登录')
+    user_id = int(user['id'])
+
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT platform, platform_uid, platform_unionid,
+                          is_primary, created_at, updated_at
+                   FROM user_oauth_bindings
+                   WHERE user_id = %s
+                   ORDER BY is_primary DESC, created_at ASC''',
+                (user_id,)
+            )
+            rows = cur.fetchall()
+        bindings = []
+        for row in rows:
+            bindings.append({
+                'platform': row[0],
+                'platform_uid': row[1][:8] + '...',  # 脱敏
+                'platform_unionid': row[2][:8] + '...' if row[2] else '',
+                'is_primary': row[3],
+                'created_at': row[4].isoformat() if row[4] else None,
+                'updated_at': row[5].isoformat() if row[5] else None,
+            })
+        return {'ok': True, 'bindings': bindings}
+    finally:
+        _release_db(conn)

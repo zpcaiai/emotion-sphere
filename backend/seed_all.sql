@@ -51,32 +51,48 @@ CREATE INDEX IF NOT EXISTS idx_bus_events_unprocessed ON data_bus_events(is_proc
 CREATE INDEX IF NOT EXISTS idx_bus_events_target ON data_bus_events(event_target, is_processed);
 COMMIT;
 
--- Table: prayers
+-- Table: user_oauth_bindings (多平台OAuth认证绑定)
 BEGIN;
-CREATE TABLE IF NOT EXISTS prayers (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, nickname VARCHAR(100) DEFAULT '', content TEXT NOT NULL, is_anonymous BOOLEAN DEFAULT FALSE, amen_count INTEGER DEFAULT 0, is_deleted BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-CREATE INDEX IF NOT EXISTS idx_prayers_user ON prayers(user_id);
-CREATE INDEX IF NOT EXISTS idx_prayers_created ON prayers(created_at DESC);
+CREATE TABLE IF NOT EXISTS user_oauth_bindings (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    platform        VARCHAR(30) NOT NULL,           -- wechat_miniprogram / wechat_official / xiaohongshu / apple / google
+    platform_uid    VARCHAR(255) NOT NULL,        -- 平台用户唯一ID (openid/xhs_user_id)
+    platform_unionid VARCHAR(255) DEFAULT '',      -- 平台统一ID（微信unionid）
+    access_token    VARCHAR(500) DEFAULT '',       -- OAuth access_token（加密存储）
+    refresh_token   VARCHAR(500) DEFAULT '',       -- OAuth refresh_token（加密存储）
+    token_expires_at TIMESTAMP,                     -- access_token 过期时间
+    platform_data   JSONB DEFAULT '{}',             -- 平台返回的原始用户信息
+    is_primary      BOOLEAN DEFAULT FALSE,          -- 是否为主绑定（用于默认登录）
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (platform, platform_uid)
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_bindings_user ON user_oauth_bindings(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_bindings_platform ON user_oauth_bindings(platform, platform_uid);
+CREATE INDEX IF NOT EXISTS idx_oauth_bindings_unionid ON user_oauth_bindings(platform_unionid) WHERE platform_unionid != '';
+DROP TRIGGER IF EXISTS trg_oauth_bindings_updated_at ON user_oauth_bindings;
+CREATE TRIGGER trg_oauth_bindings_updated_at BEFORE UPDATE ON user_oauth_bindings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 COMMIT;
 
--- Table: evangelism_prayers
+-- Table: daily_notes (替代 devotion_journals，去除圣经元素)
 BEGIN;
-CREATE TABLE IF NOT EXISTS evangelism_prayers (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, nickname VARCHAR(100) DEFAULT '', content TEXT NOT NULL, is_anonymous BOOLEAN DEFAULT FALSE, amen_count INTEGER DEFAULT 0, is_deleted BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-CREATE INDEX IF NOT EXISTS idx_evangelism_user ON evangelism_prayers(user_id);
-CREATE INDEX IF NOT EXISTS idx_evangelism_created ON evangelism_prayers(created_at DESC);
-COMMIT;
-
--- Table: devotion_journals
-BEGIN;
-CREATE TABLE IF NOT EXISTS devotion_journals (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, date DATE NOT NULL, title VARCHAR(200) DEFAULT '', content TEXT DEFAULT '', verse VARCHAR(200) DEFAULT '', reflection TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, date));
-CREATE INDEX IF NOT EXISTS idx_devotion_user ON devotion_journals(user_id);
-CREATE INDEX IF NOT EXISTS idx_devotion_date ON devotion_journals(user_id, date DESC);
-COMMIT;
-
--- Table: sermon_journals
-BEGIN;
-CREATE TABLE IF NOT EXISTS sermon_journals (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, date DATE NOT NULL, title VARCHAR(200) DEFAULT '', preacher VARCHAR(100) DEFAULT '', verse VARCHAR(200) DEFAULT '', content TEXT DEFAULT '', reflection TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, date));
-CREATE INDEX IF NOT EXISTS idx_sermon_user ON sermon_journals(user_id);
-CREATE INDEX IF NOT EXISTS idx_sermon_date ON sermon_journals(user_id, date DESC);
+CREATE TABLE IF NOT EXISTS daily_notes (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            DATE NOT NULL,
+    title           VARCHAR(200) DEFAULT '',
+    content         TEXT DEFAULT '',
+    mood            VARCHAR(50) DEFAULT '',
+    tags            TEXT[] DEFAULT '{}',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_notes_user ON daily_notes(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_notes_date ON daily_notes(user_id, date DESC);
+DROP TRIGGER IF EXISTS trg_daily_notes_updated_at ON daily_notes;
+CREATE TRIGGER trg_daily_notes_updated_at BEFORE UPDATE ON daily_notes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 COMMIT;
 
 -- Table: personal_notes
