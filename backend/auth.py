@@ -1195,3 +1195,258 @@ def list_oauth_bindings(request: Request):
         return {'ok': True, 'bindings': bindings}
     finally:
         _release_db(conn)
+
+
+# ── 阿里云短信验证码 ──────────────────────────────────────────
+
+# 阿里云配置（从环境变量读取）
+ALIYUN_ACCESS_KEY_ID     = os.getenv('ALIYUN_ACCESS_KEY_ID', '')
+ALIYUN_ACCESS_KEY_SECRET = os.getenv('ALIYUN_ACCESS_KEY_SECRET', '')
+ALIYUN_SMS_SIGN_NAME     = os.getenv('ALIYUN_SMS_SIGN_NAME', '情感星球')
+ALIYUN_SMS_TEMPLATE_CODE = os.getenv('ALIYUN_SMS_TEMPLATE_CODE', '')  # 例如 SMS_123456789
+
+# 手机号验证码存储：phone -> {code, expires, attempts}
+_PHONE_CODE_STORE: dict[str, dict] = {}
+_PHONE_CODE_LOCK = threading.Lock()
+
+PHONE_RE = re.compile(r'^1[3-9]\d{9}$')   # 中国大陆手机号
+PHONE_CODE_TTL = 600                        # 10 分钟
+
+
+def _send_aliyun_sms(phone: str, code: str) -> bool:
+    """调用阿里云短信服务发送验证码，返回是否成功。"""
+    if not ALIYUN_ACCESS_KEY_ID or not ALIYUN_ACCESS_KEY_SECRET:
+        print(f'[sms] ALIYUN credentials not configured, dev_code={code}', flush=True)
+        return True  # 开发模式：不发短信但记录日志
+
+    try:
+        from alibabacloud_dysmsapi20170525.client import Client
+        from alibabacloud_dysmsapi20170525 import models as sms_models
+        from alibabacloud_tea_openapi import models as open_models
+
+        config = open_models.Config(
+            access_key_id=ALIYUN_ACCESS_KEY_ID,
+            access_key_secret=ALIYUN_ACCESS_KEY_SECRET,
+            endpoint='dysmsapi.aliyuncs.com',
+        )
+        client = Client(config)
+
+        request = sms_models.SendSmsRequest(
+            phone_numbers=phone,
+            sign_name=ALIYUN_SMS_SIGN_NAME,
+            template_code=ALIYUN_SMS_TEMPLATE_CODE,
+            template_param=json.dumps({'code': code}),
+        )
+        response = client.send_sms(request)
+        body = response.body
+        if body.code == 'OK':
+            print(f'[sms] sent ok phone={phone[-4:].rjust(11,"*")}', flush=True)
+            return True
+        else:
+            print(f'[sms] send failed code={body.code} msg={body.message}', flush=True)
+            return False
+    except Exception as exc:
+        print(f'[sms] exception: {exc}', flush=True)
+        return False
+
+
+def _generate_phone_code(phone: str) -> str:
+    """生成 6 位验证码并存储，限制同号每分钟最多 1 次。"""
+    with _PHONE_CODE_LOCK:
+        existing = _PHONE_CODE_STORE.get(phone)
+        now = time.time()
+        if existing and now - existing.get('issued_at', 0) < 60:
+            raise HTTPException(status_code=429, detail='发送过于频繁，请 60 秒后重试')
+        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        _PHONE_CODE_STORE[phone] = {
+            'code': code,
+            'expires': now + PHONE_CODE_TTL,
+            'issued_at': now,
+            'attempts': 0,
+        }
+        return code
+
+
+def _verify_phone_code(phone: str, code: str) -> bool:
+    """校验验证码，错误超过 5 次作废。"""
+    with _PHONE_CODE_LOCK:
+        entry = _PHONE_CODE_STORE.get(phone)
+        if not entry:
+            return False
+        if time.time() > entry['expires']:
+            del _PHONE_CODE_STORE[phone]
+            return False
+        entry['attempts'] += 1
+        if entry['attempts'] > 5:
+            del _PHONE_CODE_STORE[phone]
+            return False
+        if hmac.compare_digest(entry['code'], code):
+            del _PHONE_CODE_STORE[phone]
+            return True
+        return False
+
+
+def _get_user_by_phone(phone: str) -> dict | None:
+    """通过手机号查找用户。"""
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, email, nickname, avatar, phone, login_type,
+                          password_hash, created_at
+                   FROM users WHERE phone = %s''',
+                (phone,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                'id': row[0], 'email': row[1] or '', 'nickname': row[2],
+                'avatar': row[3] or '', 'phone': row[4],
+                'login_type': row[5], 'password_hash': row[6] or '',
+                'created_at': row[7].timestamp() if row[7] else None,
+            }
+    finally:
+        _release_db(conn)
+
+
+def _create_phone_user(phone: str, nickname: str = '') -> dict:
+    """创建手机号注册用户。"""
+    conn = _get_db()
+    try:
+        default_nick = nickname or f'用户{phone[-4:]}'
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO users (phone, nickname, login_type, password_hash)
+                   VALUES (%s, %s, %s, %s)
+                   RETURNING id, created_at''',
+                (phone, default_nick, 'phone', '')
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {
+            'id': row[0], 'email': '', 'nickname': default_nick,
+            'avatar': '', 'phone': phone, 'login_type': 'phone',
+            'password_hash': '', 'created_at': row[1].timestamp() if row[1] else time.time(),
+        }
+    finally:
+        _release_db(conn)
+
+
+# ── 手机号接口 ────────────────────────────────────────────────
+
+class PhoneSendCodeRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11, description='11 位中国大陆手机号')
+    scene: str = Field(default='login', description='login 或 register')
+
+
+class PhoneLoginRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11)
+    code: str  = Field(min_length=6, max_length=6)
+    nickname: str = Field(default='', max_length=50)
+
+
+class PhoneBindRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11)
+    code: str  = Field(min_length=6, max_length=6)
+
+
+@router.post('/phone/send-code')
+async def phone_send_code(request: Request, payload: PhoneSendCodeRequest):
+    """
+    发送手机验证码（注册 & 登录通用）。
+    未配置阿里云凭据时进入开发模式，验证码写入日志不发短信。
+    """
+    client_ip = request.client.host if request.client else 'unknown'
+
+    if not PHONE_RE.match(payload.phone):
+        raise HTTPException(status_code=400, detail='手机号格式不正确')
+
+    code = _generate_phone_code(payload.phone)
+    ok = _send_aliyun_sms(payload.phone, code)
+    if not ok:
+        # 撤回存储的验证码，避免客户端盲猜
+        with _PHONE_CODE_LOCK:
+            _PHONE_CODE_STORE.pop(payload.phone, None)
+        raise HTTPException(status_code=502, detail='短信发送失败，请稍后重试')
+
+    _security_audit('PHONE_CODE_SENT', ip=client_ip,
+                    details={'phone_tail': payload.phone[-4:], 'scene': payload.scene},
+                    success=True)
+
+    resp: dict = {'ok': True, 'message': '验证码已发送，10 分钟内有效'}
+    if not ALIYUN_ACCESS_KEY_ID:
+        resp['dev_code'] = code  # 开发环境直接返回，生产删除
+    return resp
+
+
+@router.post('/phone/login')
+def phone_login(request: Request, payload: PhoneLoginRequest):
+    """
+    手机号验证码登录/注册一体接口。
+    - 手机号已注册 → 验证码正确后直接登录
+    - 手机号未注册 → 自动注册新用户后登录
+    """
+    client_ip = request.client.host if request.client else 'unknown'
+
+    if not PHONE_RE.match(payload.phone):
+        raise HTTPException(status_code=400, detail='手机号格式不正确')
+
+    if not _verify_phone_code(payload.phone, payload.code):
+        _security_audit('PHONE_LOGIN_FAILED', ip=client_ip,
+                        details={'phone_tail': payload.phone[-4:], 'reason': 'wrong_code'},
+                        success=False)
+        raise HTTPException(status_code=400, detail='验证码错误或已过期')
+
+    user_record = _get_user_by_phone(payload.phone)
+    is_new = False
+
+    if not user_record:
+        user_record = _create_phone_user(payload.phone, payload.nickname)
+        is_new = True
+        _security_audit('PHONE_REGISTER_SUCCESS', ip=client_ip,
+                        details={'phone_tail': payload.phone[-4:]}, success=True)
+        print(f'[auth] phone new user id={user_record["id"]}', flush=True)
+    else:
+        _security_audit('PHONE_LOGIN_SUCCESS', ip=client_ip,
+                        details={'phone_tail': payload.phone[-4:]}, success=True)
+        print(f'[auth] phone login ok id={user_record["id"]}', flush=True)
+
+    public = {k: v for k, v in user_record.items() if k != 'password_hash'}
+    token = _make_session(public)
+    return {'ok': True, 'token': token, 'user': public, 'is_new': is_new}
+
+
+@router.post('/phone/bind')
+def phone_bind(request: Request, payload: PhoneBindRequest):
+    """为当前已登录用户绑定手机号。"""
+    client_ip = request.client.host if request.client else 'unknown'
+    user = get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail='请先登录')
+
+    if not PHONE_RE.match(payload.phone):
+        raise HTTPException(status_code=400, detail='手机号格式不正确')
+
+    if not _verify_phone_code(payload.phone, payload.code):
+        raise HTTPException(status_code=400, detail='验证码错误或已过期')
+
+    existing = _get_user_by_phone(payload.phone)
+    if existing and existing['id'] != int(user['id']):
+        raise HTTPException(status_code=409, detail='该手机号已被其他账号绑定')
+
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE users SET phone = %s WHERE id = %s',
+                (payload.phone, user['id'])
+            )
+            conn.commit()
+    finally:
+        _release_db(conn)
+
+    _security_audit('PHONE_BIND_SUCCESS', ip=client_ip,
+                    details={'phone_tail': payload.phone[-4:], 'user_id': user['id']},
+                    success=True)
+    return {'ok': True, 'message': '手机号绑定成功'}

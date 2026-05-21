@@ -101,6 +101,26 @@ def _init_db():
                     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # 手机号字段迁移（幂等）
+            cur.execute('''
+                ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS phone VARCHAR(20) UNIQUE
+            ''')
+            # daily_notes 表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS daily_notes (
+                    id         SERIAL PRIMARY KEY,
+                    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date       DATE NOT NULL,
+                    title      VARCHAR(200) DEFAULT '',
+                    content    TEXT DEFAULT '',
+                    mood       VARCHAR(50) DEFAULT '',
+                    tags       JSONB DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, date)
+                )
+            ''')
 
             # 安全审计日志表
             cur.execute('''

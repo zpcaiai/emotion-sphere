@@ -13,3 +13,6 @@ httpx>=0.27.0
 slowapi>=0.1.9
 # WeChat Pay v3 dependencies
 cryptography>=42.0.0
+# Aliyun SMS
+alibabacloud-dysmsapi20170525>=2.0.0
+alibabacloud-tea-openapi>=0.3.0
