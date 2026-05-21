@@ -1,0 +1,27 @@
+<view class="container">
+  <view class="logo-wrap">
+    <text class="logo">✨</text>
+    <text class="app-name">情感星球</text>
+    <text class="app-desc">以圣经的光照亮你的情绪</text>
+  </view>
+
+  <view class="card">
+    <text class="card-title">欢迎登录</text>
+    <text class="card-sub">使用微信一键登录，解锁全部功能</text>
+
+    <button
+      class="wx-login-btn"
+      open-type="getPhoneNumber"
+      bindtap="onLogin"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+    >
+      <text class="btn-icon">💬</text>
+      <text>{{loading ? '登录中…' : '微信一键登录'}}</text>
+    </button>
+
+    <text wx:if="{{error}}" class="error-tip">{{error}}</text>
+
+    <text class="privacy-tip">登录即代表同意《用户协议》和《隐私政策》</text>
+  </view>
+</view>

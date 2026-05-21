@@ -1,0 +1,25 @@
+<view class="container">
+  <view class="logo-wrap">
+    <text class="logo">✨</text>
+    <text class="app-name">情感星球</text>
+    <text class="app-desc">以圣经的光照亮你的情绪</text>
+  </view>
+
+  <view class="card">
+    <text class="card-title">欢迎登录</text>
+    <text class="card-sub">使用小红书账号一键登录</text>
+
+    <button
+      class="login-btn"
+      onTap="onLogin"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+    >
+      <text>{{loading ? '登录中…' : '🔑 一键登录'}}</text>
+    </button>
+
+    <text a:if="{{error}}" class="error-tip">{{error}}</text>
+
+    <text class="privacy-tip">登录即代表同意《用户协议》和《隐私政策》</text>
+  </view>
+</view>

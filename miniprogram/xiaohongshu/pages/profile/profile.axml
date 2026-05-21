@@ -1,0 +1,90 @@
+<view class="container">
+  <!-- 未登录 -->
+  <view a:if="{{!logged}}" class="unlogged-wrap">
+    <text class="unlogged-icon">👤</text>
+    <text class="unlogged-title">登录后解锁全部功能</text>
+    <button class="login-btn" onTap="goLogin">立即登录</button>
+  </view>
+
+  <!-- 已登录 -->
+  <view a:else>
+    <!-- 用户信息 -->
+    <view class="user-card">
+      <view class="avatar-placeholder">
+        <text>{{userInfo && userInfo.nickname ? userInfo.nickname[0] : '我'}}</text>
+      </view>
+      <view class="user-info">
+        <text class="nickname">{{userInfo && userInfo.nickname || '星球用户'}}</text>
+        <text class="user-sub">{{userInfo && userInfo.email || ''}}</text>
+      </view>
+      <text class="logout-btn" onTap="onLogout">退出</text>
+    </view>
+
+    <!-- 权益卡 -->
+    <view a:if="{{entitlements}}" class="ent-card">
+      <view class="ent-row">
+        <view class="ent-item">
+          <text class="ent-value">{{entitlements.credits_balance || 0}}</text>
+          <text class="ent-label">⭐ 星星币</text>
+        </view>
+        <view class="ent-divider" />
+        <view class="ent-item">
+          <text class="ent-value {{entitlements.is_subscribed ? 'subscribed' : ''}}">
+            {{entitlements.is_subscribed ? '已订阅' : '未订阅'}}
+          </text>
+          <text class="ent-label">👑 高级订阅</text>
+        </view>
+        <view class="ent-divider" />
+        <view class="ent-item">
+          <text class="ent-value">{{entitlements.unlocked_features ? entitlements.unlocked_features.length : 0}}</text>
+          <text class="ent-label">🔓 已解锁</text>
+        </view>
+      </view>
+      <view a:if="{{entitlements.is_subscribed && entitlements.subscription_expires_at}}" class="sub-expires">
+        <text>订阅有效期至 {{entitlements.subscription_expires_at.slice(0,10)}}</text>
+      </view>
+    </view>
+
+    <!-- 前往商城 -->
+    <view class="action-row" onTap="goShop">
+      <text class="action-icon">🛍</text>
+      <text class="action-text">前往商城，解锁更多功能</text>
+      <text class="action-arrow">›</text>
+    </view>
+
+    <!-- 最近订单 -->
+    <view class="section-header">
+      <text class="section-title">最近订单</text>
+    </view>
+
+    <view a:if="{{loading}}" class="loading-text"><text>加载中…</text></view>
+
+    <view a:elif="{{orders.length === 0}}" class="empty-orders"><text>暂无订单</text></view>
+
+    <view a:else>
+      <view
+        a:for="{{orders}}"
+        a:key="order_no"
+        class="order-card"
+      >
+        <view class="order-top">
+          <text class="order-name">{{item.product_name}}</text>
+          <text class="order-status status-{{item.status}}">
+            {{item.status === 'pending_payment' ? '待支付' : item.status === 'fulfilled' ? '已完成' : item.status === 'cancelled' ? '已取消' : item.status === 'refunded' ? '已退款' : item.status}}
+          </text>
+        </view>
+        <view class="order-bottom">
+          <text class="order-price">¥{{(item.total_price_fen / 100).toFixed(2)}}</text>
+          <text class="order-date">{{item.created_at ? item.created_at.slice(0,10) : ''}}</text>
+          <button
+            a:if="{{item.status === 'pending_payment'}}"
+            class="cancel-btn"
+            size="mini"
+            onTap="cancelOrder"
+            data-orderno="{{item.order_no}}"
+          >取消</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

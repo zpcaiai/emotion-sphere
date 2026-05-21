@@ -340,6 +340,22 @@ async def lifespan(app: FastAPI):
     from backend.auth import init_db_functions
     init_db_functions(_get_db, _release_db)
 
+    # 注入数据库函数到 shop / wxpay 模块，并初始化商店表
+    if has_database and _db_pool:
+        try:
+            from backend.shop import init_db_functions as shop_init_db, init_shop_tables
+            from backend.wxpay import init_db_functions as wxpay_init_db
+            shop_init_db(_get_db, _release_db)
+            wxpay_init_db(_get_db, _release_db)
+            _conn = _get_db()
+            try:
+                init_shop_tables(_conn)
+            finally:
+                _release_db(_conn)
+            print('[startup] Shop tables initialized', flush=True)
+        except Exception as exc:
+            print(f'[startup] Shop init skipped: {exc}', flush=True)
+
     # 初始化 DSS 决策支持系统
     if has_database and _db_pool:
         try:
@@ -483,6 +499,12 @@ app.include_router(auth_router)
 # ── 注册决策支持路由 (DSS) ────────────────────────────────────
 from backend.decision_support import router as dss_router, init_dss_storage
 app.include_router(dss_router)
+
+# ── 注册虚拟商店 + 微信支付路由 ──────────────────────────────
+from backend.shop import router as shop_router
+from backend.wxpay import router as wxpay_router
+app.include_router(shop_router)
+app.include_router(wxpay_router)
 
 
 # ── 健康检查 ──────────────────────────────────────────────────

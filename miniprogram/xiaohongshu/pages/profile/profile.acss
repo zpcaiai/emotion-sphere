@@ -1,0 +1,47 @@
+.container { padding: 0 24rpx 120rpx; min-height: 100vh; background: linear-gradient(160deg, #0a0a1e 0%, #101030 100%); }
+
+.unlogged-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 160rpx; }
+.unlogged-icon { font-size: 100rpx; }
+.unlogged-title { font-size: 32rpx; color: rgba(255,255,255,0.6); margin: 24rpx 0 48rpx; }
+.login-btn { background: linear-gradient(135deg, #f093fb, #f5576c); color: #fff; border-radius: 20rpx; font-size: 32rpx; font-weight: 600; border: none; padding: 24rpx 80rpx; }
+
+.user-card { display: flex; align-items: center; gap: 24rpx; background: rgba(255,255,255,0.06); border: 1rpx solid rgba(255,255,255,0.10); border-radius: 24rpx; padding: 28rpx; margin-top: 40rpx; }
+.avatar-placeholder { width: 96rpx; height: 96rpx; border-radius: 50%; background: linear-gradient(135deg, #f093fb, #f5576c); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.avatar-placeholder text { font-size: 40rpx; color: #fff; font-weight: 700; }
+.user-info { flex: 1; }
+.nickname { display: block; font-size: 32rpx; font-weight: 700; color: #fff; }
+.user-sub  { display: block; font-size: 24rpx; color: rgba(255,255,255,0.4); margin-top: 6rpx; }
+.logout-btn { font-size: 26rpx; color: rgba(255,100,100,0.7); }
+
+.ent-card { background: rgba(255,255,255,0.05); border: 1rpx solid rgba(255,255,255,0.10); border-radius: 24rpx; padding: 28rpx 16rpx; margin-top: 20rpx; }
+.ent-row { display: flex; align-items: center; justify-content: space-around; }
+.ent-item { text-align: center; flex: 1; }
+.ent-divider { width: 1rpx; height: 60rpx; background: rgba(255,255,255,0.1); }
+.ent-value { display: block; font-size: 40rpx; font-weight: 700; color: #f093fb; }
+.ent-value.subscribed { color: #ffd500; }
+.ent-label { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 8rpx; }
+.sub-expires { text-align: center; font-size: 22rpx; color: rgba(255,213,0,0.6); margin-top: 16rpx; padding-top: 16rpx; border-top: 1rpx solid rgba(255,255,255,0.07); }
+
+.action-row { display: flex; align-items: center; gap: 16rpx; background: rgba(240,147,251,0.08); border: 1rpx solid rgba(240,147,251,0.2); border-radius: 20rpx; padding: 24rpx 28rpx; margin-top: 20rpx; }
+.action-icon { font-size: 40rpx; }
+.action-text { flex: 1; font-size: 28rpx; color: rgba(255,255,255,0.8); }
+.action-arrow { font-size: 36rpx; color: rgba(255,255,255,0.3); }
+
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-top: 40rpx; margin-bottom: 16rpx; }
+.section-title { font-size: 30rpx; font-weight: 600; color: rgba(255,255,255,0.7); }
+
+.loading-text, .empty-orders { text-align: center; font-size: 26rpx; color: rgba(255,255,255,0.3); padding: 48rpx 0; }
+
+.order-card { background: rgba(255,255,255,0.05); border: 1rpx solid rgba(255,255,255,0.08); border-radius: 20rpx; padding: 24rpx; margin-bottom: 16rpx; }
+.order-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12rpx; }
+.order-name { font-size: 28rpx; color: #fff; font-weight: 600; flex: 1; }
+.order-status { font-size: 22rpx; border-radius: 10rpx; padding: 6rpx 14rpx; background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.5); }
+.order-status.status-fulfilled { color: #34d399; background: rgba(52,211,153,0.1); }
+.order-status.status-pending_payment { color: #fbbf24; background: rgba(251,191,36,0.1); }
+.order-status.status-cancelled { color: rgba(255,255,255,0.3); }
+.order-status.status-refunded { color: rgba(96,165,250,0.8); background: rgba(96,165,250,0.1); }
+
+.order-bottom { display: flex; align-items: center; gap: 16rpx; }
+.order-price { font-size: 28rpx; color: #f093fb; font-weight: 600; }
+.order-date  { flex: 1; font-size: 22rpx; color: rgba(255,255,255,0.3); }
+.cancel-btn  { background: rgba(255,100,100,0.15); color: #ff6b6b; border: 1rpx solid rgba(255,100,100,0.3); border-radius: 10rpx; font-size: 22rpx; padding: 6rpx 20rpx; }

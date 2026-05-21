@@ -1,10 +1,45 @@
 {
-  "pages": ["pages/index/index"],
+  "pages": [
+    "pages/index/index",
+    "pages/shop/shop",
+    "pages/profile/profile",
+    "pages/login/login"
+  ],
   "window": {
     "backgroundTextStyle": "dark",
     "navigationBarBackgroundColor": "#0a0a1e",
     "navigationBarTitleText": "情感星球",
     "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "rgba(255,255,255,0.4)",
+    "selectedColor": "#f093fb",
+    "backgroundColor": "#0d0d28",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "情感星球",
+        "iconPath":  "assets/icons/home.png",
+        "selectedIconPath": "assets/icons/home_active.png"
+      },
+      {
+        "pagePath": "pages/shop/shop",
+        "text": "商城",
+        "iconPath":  "assets/icons/shop.png",
+        "selectedIconPath": "assets/icons/shop_active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath":  "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile_active.png"
+      }
+    ]
+  },
+  "networkTimeout": {
+    "request": 30000,
+    "connectSocket": 30000
   },
   "sitemapLocation": "sitemap.json"
 }

@@ -1,0 +1,73 @@
+<view class="container">
+  <!-- 顶栏 -->
+  <view class="header">
+    <text class="title">✨ 星球商城</text>
+    <text class="subtitle">解锁深度体验</text>
+  </view>
+
+  <!-- 分类 Tab -->
+  <scroll-view class="tabs" scroll-x>
+    <view
+      wx:for="{{tabs}}"
+      wx:key="key"
+      class="tab {{activeTab === item.key ? 'tab-active' : ''}}"
+      bindtap="switchTab"
+      data-key="{{item.key}}"
+    >
+      <text>{{item.label}}</text>
+    </view>
+  </scroll-view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-wrap">
+    <text class="loading-text">加载中…</text>
+  </view>
+
+  <!-- 商品列表 -->
+  <view wx:else class="product-list">
+    <view wx:if="{{products.length === 0}}" class="empty-tip">
+      <text>暂无商品</text>
+    </view>
+
+    <view
+      wx:for="{{products}}"
+      wx:key="id"
+      class="product-card"
+    >
+      <!-- 分类标签 -->
+      <view class="product-tag-wrap">
+        <text class="product-tag">{{item.category_icon || ''}} {{item.category_name || item.product_type}}</text>
+      </view>
+
+      <text class="product-name">{{item.name}}</text>
+      <text class="product-desc">{{item.description}}</text>
+
+      <!-- 积分/有效期提示 -->
+      <view class="product-meta">
+        <text wx:if="{{item.credits_grant > 0}}" class="meta-badge credits">+{{item.credits_grant}} 星星币</text>
+        <text wx:if="{{item.duration_days > 0}}" class="meta-badge duration">{{item.duration_days === 36500 ? '永久' : item.duration_days + '天'}}</text>
+        <text wx:if="{{item.feature_keys && item.feature_keys.length > 0}}" class="meta-badge feature">解锁功能</text>
+      </view>
+
+      <!-- 价格 + 购买 -->
+      <view class="product-footer">
+        <view class="price-wrap">
+          <text wx:if="{{item.original_price_fen > item.price_fen && item.original_price_fen > 0}}" class="price-original">
+            ¥{{(item.original_price_fen / 100).toFixed(2)}}
+          </text>
+          <text class="price-main {{item.price_fen === 0 ? 'price-free' : ''}}">
+            {{item.price_fen === 0 ? '免费' : '¥' + (item.price_fen / 100).toFixed(2)}}
+          </text>
+        </view>
+        <button
+          class="buy-btn"
+          bindtap="buyProduct"
+          data-sku="{{item.sku}}"
+          data-name="{{item.name}}"
+        >
+          {{item.price_fen === 0 ? '立即领取' : '立即购买'}}
+        </button>
+      </view>
+    </view>
+  </view>
+</view>

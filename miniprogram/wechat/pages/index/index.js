@@ -1,3 +1,4 @@
+const api = require('../../utils/api')
 const app = getApp()
 
 Page({
@@ -21,17 +22,14 @@ Page({
   },
 
   _loadEmotions() {
-    wx.request({
-      url: `${app.globalData.apiBase}/layout`,
-      method: 'GET',
-      success: (res) => {
-        const items = (res.data && res.data.items) || []
+    api.fetchLayout()
+      .then((data) => {
+        const items = (data && data.items) || []
         this.setData({ emotions: items.slice(0, 60) })
-      },
-      fail: () => {
+      })
+      .catch(() => {
         console.warn('[miniprogram] failed to load emotions layout')
-      },
-    })
+      })
   },
 
   selectEmotion(e) {
@@ -50,28 +48,22 @@ Page({
       return
     }
     this.setData({ loading: true, verses: [], degraded: false })
-    wx.request({
-      url: `${app.globalData.apiBase}/query`,
-      method: 'POST',
-      header: { 'Content-Type': 'application/json' },
-      data: { query: queryText, topFeatures: 5, topVerses: 5, languageFilter: 'cuv' },
-      success: (res) => {
-        const data = res.data || {}
+    api.queryVerses(queryText)
+      .then((data) => {
         if (data.degraded) {
           this.setData({ degraded: true, verses: [] })
           return
         }
         const cuv = (data.verse_summary && data.verse_summary.cuv) || []
         this.setData({ verses: cuv })
-      },
-      fail: () => {
+      })
+      .catch(() => {
         this.setData({ degraded: true })
         wx.showToast({ title: '网络错误，请重试', icon: 'none' })
-      },
-      complete: () => {
+      })
+      .finally(() => {
         this.setData({ loading: false })
-      },
-    })
+      })
   },
 
   openStory() {
@@ -82,22 +74,16 @@ Page({
   },
 
   _fetchStory(emotion) {
-    wx.request({
-      url: `${app.globalData.apiBase}/story`,
-      method: 'POST',
-      header: { 'Content-Type': 'application/json' },
-      data: { emotion },
-      success: (res) => {
-        const data = res.data || {}
+    api.fetchStory(emotion)
+      .then((data) => {
         this.setData({ storyText: data.story || `愿在"${emotion}"中，你找到一丝平静与力量。` })
-      },
-      fail: () => {
+      })
+      .catch(() => {
         this.setData({ storyError: '故事生成失败，请重试', storyText: '' })
-      },
-      complete: () => {
+      })
+      .finally(() => {
         this.setData({ storyLoading: false })
-      },
-    })
+      })
   },
 
   retryStory() {
@@ -114,27 +100,20 @@ Page({
 
   speakStory() {
     const { speaking, storyText } = this.data
-    if (speaking) {
-      this._stopSpeak()
-      return
-    }
+    if (speaking) { this._stopSpeak(); return }
     if (!storyText) return
     wx.createInnerAudioContext && this._speakWithTTS(storyText)
   },
 
   _speakWithTTS(text) {
-    // WeChat TTS via system accessibility API (best-effort)
     if (wx.getSystemInfoSync().platform === 'devtools') {
       wx.showToast({ title: '开发工具暂不支持语音', icon: 'none' })
       return
     }
     this.setData({ speaking: true })
-    // Use wx.textToSpeech if available (>= 2.20.3)
     if (wx.textToSpeech) {
       wx.textToSpeech({
-        lang: 'zh_CN',
-        speed: 1.0,
-        content: text,
+        lang: 'zh_CN', speed: 1.0, content: text,
         success: () => this.setData({ speaking: false }),
         fail: () => {
           wx.showToast({ title: '语音播放失败', icon: 'none' })

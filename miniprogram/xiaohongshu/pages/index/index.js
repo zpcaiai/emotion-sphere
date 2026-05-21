@@ -1,4 +1,4 @@
-const app = getApp()
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -20,15 +20,12 @@ Page({
   },
 
   _loadEmotions() {
-    my.httpRequest({
-      url: `${app.globalData.apiBase}/layout`,
-      method: 'GET',
-      success: (res) => {
-        const items = (res.data && res.data.items) || []
+    api.fetchLayout()
+      .then((data) => {
+        const items = (data && data.items) || []
         this.setData({ emotions: items.slice(0, 60) })
-      },
-      fail: () => console.warn('[xhs] failed to load emotions'),
-    })
+      })
+      .catch(() => console.warn('[xhs] failed to load emotions'))
   },
 
   selectEmotion(e) {
@@ -49,23 +46,17 @@ Page({
       return
     }
     this.setData({ loading: true, verses: [], degraded: false })
-    my.httpRequest({
-      url: `${app.globalData.apiBase}/query`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: JSON.stringify({ query: queryText, topFeatures: 5, topVerses: 5, languageFilter: 'cuv' }),
-      success: (res) => {
-        const data = res.data || {}
+    api.queryVerses(queryText)
+      .then((data) => {
         if (data.degraded) { this.setData({ degraded: true }); return }
         const cuv = (data.verse_summary && data.verse_summary.cuv) || []
         this.setData({ verses: cuv })
-      },
-      fail: () => {
+      })
+      .catch(() => {
         this.setData({ degraded: true })
         my.showToast({ content: '网络错误，请重试', type: 'none' })
-      },
-      complete: () => this.setData({ loading: false }),
-    })
+      })
+      .finally(() => this.setData({ loading: false }))
   },
 
   openStory() {
@@ -76,18 +67,12 @@ Page({
   },
 
   _fetchStory(emotion) {
-    my.httpRequest({
-      url: `${app.globalData.apiBase}/story`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: JSON.stringify({ emotion }),
-      success: (res) => {
-        const data = res.data || {}
+    api.fetchStory(emotion)
+      .then((data) => {
         this.setData({ storyText: data.story || `愿在"${emotion}"中，你找到一丝平静与力量。` })
-      },
-      fail: () => this.setData({ storyError: '故事生成失败，请重试', storyText: '' }),
-      complete: () => this.setData({ storyLoading: false }),
-    })
+      })
+      .catch(() => this.setData({ storyError: '故事生成失败，请重试', storyText: '' }))
+      .finally(() => this.setData({ storyLoading: false }))
   },
 
   retryStory() {
@@ -105,7 +90,6 @@ Page({
     const { speaking, storyText } = this.data
     if (speaking || !storyText) return
     this.setData({ speaking: true })
-    // XHS miniprogram uses my.tts if available, else show toast
     if (my.tts) {
       my.tts({
         content: storyText,

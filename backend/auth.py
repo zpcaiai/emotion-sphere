@@ -471,6 +471,89 @@ async def wxapp_login(request: Request, payload: WxappLoginRequest):
     return {'ok': True, 'token': token, 'user': public}
 
 
+@router.post('/xhs-login')
+async def xhs_login(request: Request, payload: WxappLoginRequest):
+    """
+    小红书小程序登录。
+    小红书开放平台目前对外提供 my.getAuthCode → 服务端换取 openId 的流程，
+    与微信 jscode2session 类似。
+    需配置环境变量：
+      XHS_APP_ID      小红书应用 AppId
+      XHS_APP_SECRET  小红书应用 AppSecret
+    """
+    client_ip = request.client.host if request.client else 'unknown'
+
+    xhs_app_id     = os.getenv('XHS_APP_ID', '')
+    xhs_app_secret = os.getenv('XHS_APP_SECRET', '')
+
+    # 若无小红书凭据，以 code 作为伪 openid 支持开发/测试环境
+    if not xhs_app_id or not xhs_app_secret:
+        openid = f'xhs_dev_{payload.code[:16]}'
+        print(f'[auth] XHS dev mode, pseudo-openid={openid}', flush=True)
+    else:
+        # 小红书 jscode2session 接口（请参考小红书开放平台最新文档更新 URL）
+        url = 'https://ark.xiaohongshu.com/ark/open_api/user/code2session'
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    url,
+                    json={'appId': xhs_app_id, 'secret': xhs_app_secret, 'code': payload.code},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            _security_audit('XHS_LOGIN_FAILED', ip=client_ip,
+                            details={'error': str(exc)}, success=False)
+            raise HTTPException(status_code=503, detail=f'小红书登录服务暂时不可用: {exc}')
+
+        if data.get('code') != 0 and data.get('code') is not None:
+            raise HTTPException(status_code=401,
+                                detail=f"小红书登录失败: {data.get('msg', str(data))}")
+
+        openid = data.get('openId') or data.get('openid') or data.get('userId')
+        if not openid:
+            raise HTTPException(status_code=401, detail='未能从小红书获取用户标识，请重试')
+
+    conn = _get_db()
+    user_record = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT id, email, nickname, avatar, openid, unionid,
+                          login_type, password_hash, created_at
+                   FROM users WHERE openid = %s''',
+                (openid,)
+            )
+            row = cur.fetchone()
+            if row:
+                user_record = {
+                    'id': row[0], 'email': row[1], 'nickname': row[2],
+                    'avatar': row[3], 'openid': row[4], 'unionid': row[5],
+                    'login_type': row[6], 'password_hash': row[7] or '',
+                    'created_at': row[8].timestamp() if row[8] else None,
+                }
+    finally:
+        _release_db(conn)
+
+    if not user_record:
+        nickname = payload.nickname or f"小红书用户_{str(openid)[-4:]}"
+        user_record = _create_user(
+            email=None,
+            nickname=nickname,
+            avatar=payload.avatar or '',
+            openid=openid,
+            password_hash='',
+            login_type='xhs',
+        )
+
+    public = {k: v for k, v in user_record.items() if k != 'password_hash'}
+    token = _make_session(public)
+    _security_audit('XHS_LOGIN_SUCCESS', ip=client_ip,
+                    details={'openid': openid, 'nickname': public['nickname']}, success=True)
+    return {'ok': True, 'token': token, 'user': public}
+
+
 @router.get('/me')
 def auth_me(request: Request):
     """验证 session token，返回用户信息。"""

@@ -1,9 +1,39 @@
 {
-  "pages": ["pages/index/index"],
+  "pages": [
+    "pages/index/index",
+    "pages/shop/shop",
+    "pages/profile/profile",
+    "pages/login/login"
+  ],
   "window": {
     "backgroundTextStyle": "dark",
     "navigationBarBackgroundColor": "#0a0a1e",
     "navigationBarTitleText": "情感星球",
     "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "textColor": "rgba(255,255,255,0.4)",
+    "selectedColor": "#f093fb",
+    "backgroundColor": "#0d0d28",
+    "items": [
+      {
+        "pagePath": "pages/index/index",
+        "name": "情感星球",
+        "icon":         "assets/icons/home.png",
+        "activeIcon":   "assets/icons/home_active.png"
+      },
+      {
+        "pagePath": "pages/shop/shop",
+        "name": "商城",
+        "icon":         "assets/icons/shop.png",
+        "activeIcon":   "assets/icons/shop_active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "name": "我的",
+        "icon":         "assets/icons/profile.png",
+        "activeIcon":   "assets/icons/profile_active.png"
+      }
+    ]
   }
 }
