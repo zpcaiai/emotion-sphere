@@ -1,0 +1,11 @@
+requirements.txt
+backend/
+tests/
+scripts/
+docs/
+miniprogram/
+pyproject.toml
+Dockerfile
+render.yaml
+*.py
+*.sql
