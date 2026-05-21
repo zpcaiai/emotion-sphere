@@ -18,6 +18,8 @@ const StoryCard = lazy(() => import('./StoryCard'))
 const DecisionSupportPage = lazy(() => import('./DecisionSupportPage'))
 const HabitsPage = lazy(() => import('./HabitsPage'))
 const PersonaProfilePage = lazy(() => import('./PersonaProfilePage'))
+const UserProfilePage = lazy(() => import('./UserProfilePage'))
+const SettingsPage = lazy(() => import('./SettingsPage'))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -111,11 +113,11 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'profile',
-            element: <div>User Profile (Protected)</div>
+            element: <UserProfilePage />
           },
           {
             path: 'settings',
-            element: <div>Settings (Protected)</div>
+            element: <SettingsPage />
           }
         ]
       }
