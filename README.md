@@ -1,3 +1,12 @@
+---
+title: Emotion Sphere 情感星球
+emoji: 🌟
+colorFrom: purple
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # Emotion Sphere 情感星球
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
