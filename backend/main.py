@@ -771,7 +771,7 @@ def update_user_profile(payload: UpdateProfileRequest, request: Request):
 # 替代原有的 devotion/sermon/personal notes，去除圣经元素
 
 class DailyNoteRequest(BaseModel):
-    date: str = Field(..., regex=r'^\\d{4}-\\d{2}-\\d{2}$')
+    date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$')
     title: str = Field(default='', max_length=200)
     content: str = Field(default='', max_length=5000)
     mood: str = Field(default='', max_length=50)
