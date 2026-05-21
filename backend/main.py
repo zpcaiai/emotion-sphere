@@ -122,6 +122,25 @@ def _init_db():
                 )
             ''')
 
+            # 用户画像测评表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS profile_survey (
+                    id             SERIAL PRIMARY KEY,
+                    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    mbti_type      VARCHAR(4)  DEFAULT '',
+                    mbti_vector    JSONB       DEFAULT '{}',
+                    emotion_style  VARCHAR(30) DEFAULT '',
+                    interest_tags  JSONB       DEFAULT '[]',
+                    avatar_id      VARCHAR(100) DEFAULT '',
+                    avatar_style   VARCHAR(50)  DEFAULT '',
+                    extra          JSONB       DEFAULT '{}',
+                    completed      BOOLEAN     DEFAULT FALSE,
+                    created_at     TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                    updated_at     TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id)
+                )
+            ''')
+
             # 安全审计日志表
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS security_audit (
@@ -2918,6 +2937,88 @@ def get_persona_profile(request: Request):
             'total_tags': 0,
             'note': '开始记录你的情绪和习惯，人格画像将逐渐成形。'
         }
+    finally:
+        _release_db(conn)
+
+
+# ── 用户画像测评 /api/profile/survey ─────────────────────────
+
+class ProfileSurveyRequest(BaseModel):
+    mbti_type:     str  = Field(default='', max_length=4)
+    mbti_vector:   dict = Field(default={})
+    emotion_style: str  = Field(default='', max_length=30)
+    interest_tags: list = Field(default=[])
+    avatar_id:     str  = Field(default='', max_length=100)
+    avatar_style:  str  = Field(default='', max_length=50)
+    extra:         dict = Field(default={})
+    completed:     bool = Field(default=False)
+
+
+@app.get('/api/profile/survey')
+def get_profile_survey(request: Request):
+    """获取当前用户画像测评数据"""
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''SELECT mbti_type, mbti_vector, emotion_style, interest_tags,
+                          avatar_id, avatar_style, extra, completed, updated_at
+                   FROM profile_survey WHERE user_id = %s''',
+                (user['id'],)
+            )
+            row = cur.fetchone()
+        if not row:
+            return {'ok': True, 'survey': None, 'completed': False}
+        return {
+            'ok': True,
+            'completed': row[7],
+            'survey': {
+                'mbti_type':     row[0],
+                'mbti_vector':   row[1],
+                'emotion_style': row[2],
+                'interest_tags': row[3],
+                'avatar_id':     row[4],
+                'avatar_style':  row[5],
+                'extra':         row[6],
+                'updated_at':    row[8].isoformat() if row[8] else None,
+            }
+        }
+    finally:
+        _release_db(conn)
+
+
+@app.post('/api/profile/survey')
+def save_profile_survey(payload: ProfileSurveyRequest, request: Request):
+    """保存 / 更新用户画像测评（upsert）"""
+    user = _require_user(request)
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO profile_survey
+                   (user_id, mbti_type, mbti_vector, emotion_style,
+                    interest_tags, avatar_id, avatar_style, extra, completed)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (user_id) DO UPDATE SET
+                       mbti_type     = EXCLUDED.mbti_type,
+                       mbti_vector   = EXCLUDED.mbti_vector,
+                       emotion_style = EXCLUDED.emotion_style,
+                       interest_tags = EXCLUDED.interest_tags,
+                       avatar_id     = EXCLUDED.avatar_id,
+                       avatar_style  = EXCLUDED.avatar_style,
+                       extra         = EXCLUDED.extra,
+                       completed     = EXCLUDED.completed,
+                       updated_at    = NOW()
+                   RETURNING id, completed''',
+                (user['id'], payload.mbti_type, json.dumps(payload.mbti_vector),
+                 payload.emotion_style, json.dumps(payload.interest_tags),
+                 payload.avatar_id, payload.avatar_style,
+                 json.dumps(payload.extra), payload.completed)
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': row[0], 'completed': row[1]}
     finally:
         _release_db(conn)
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   loginWithEmail, 
   registerWithEmail, 
@@ -236,6 +237,7 @@ function LoginForm({ email, setEmail, onLogin, onReset }) {
 }
 
 function RegisterForm({ email, setEmail, onDone, onLogin }) {
+  const navigate = useNavigate()
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [nickname, setNickname] = useState('')
@@ -295,6 +297,7 @@ function RegisterForm({ email, setEmail, onDone, onLogin }) {
     try {
       const data = await registerWithEmail(email.trim(), code.trim(), password, nickname.trim())
       if (data.user && onLogin) onLogin(data.user)
+      navigate('/onboarding', { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {

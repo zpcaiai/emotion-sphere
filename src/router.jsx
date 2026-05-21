@@ -20,6 +20,7 @@ const HabitsPage = lazy(() => import('./HabitsPage'))
 const PersonaProfilePage = lazy(() => import('./PersonaProfilePage'))
 const UserProfilePage = lazy(() => import('./UserProfilePage'))
 const SettingsPage = lazy(() => import('./SettingsPage'))
+const OnboardingPage = lazy(() => import('./OnboardingPage'))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -106,6 +107,10 @@ export const router = createBrowserRouter([
       {
         path: 'login',
         element: <LoginScreen />
+      },
+      {
+        path: 'onboarding',
+        element: <OnboardingPage />
       },
       // Protected routes
       {
